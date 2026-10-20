@@ -1,0 +1,596 @@
+extends CanvasLayer
+## In-game interface, right-to-left Persian. Built in code so it is easy to restyle later.
+
+var world: Node
+
+var root: Control
+var overlay: Control
+var minimap: Control
+var res_labels := {}
+var pop_label: Label
+var wave_label: Label
+var speed_btn: Button
+var build_bar: HBoxContainer
+var build_buttons := {}
+var sel_panel: PanelContainer
+var sel_box: VBoxContainer
+var build_panel: PanelContainer
+var build_hint: Label
+var build_ok: Button
+var box_btn: Button
+var toasts: VBoxContainer
+var dim: ColorRect
+var menu_frame: PanelContainer
+var help_frame: PanelContainer
+var end_frame: PanelContainer
+var end_title: Label
+var end_text: Label
+var _refresh_t := 0.0
+var blockers: Array[Control] = []
+
+
+## True when a screen point is on a panel or button, so the world ignores that touch.
+func is_over_ui(p: Vector2) -> bool:
+	if dim.visible:
+		return true
+	for c in blockers:
+		if c.is_visible_in_tree() and c.get_global_rect().has_point(p):
+			return true
+	return false
+
+const ICONS := {"wood": "res://assets/icons/wood.svg", "stone": "res://assets/icons/stone.svg",
+	"food": "res://assets/icons/food.svg", "gold": "res://assets/icons/gold.svg"}
+
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	layer = 5
+	root = Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.theme = App.theme
+	root.layout_direction = Control.LAYOUT_DIRECTION_RTL
+	add_child(root)
+
+	overlay = preload("res://scripts/ui/overlay.gd").new()
+	overlay.world = world
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(overlay)
+
+	_build_top_bar()
+	_build_bottom_bar()
+	_build_side_tools()
+	_build_selection_panel()
+	_build_build_panel()
+	_build_toasts()
+	_build_minimap()
+	_build_dialogs()
+
+	world.message.connect(_on_message)
+	world.selection_changed.connect(_on_selection)
+	world.game_over.connect(_on_game_over)
+	_on_selection()
+	_refresh()
+
+
+# ---------------- helpers ----------------
+func _label(text: String, size := 18, color := App.IVORY, font: Font = null) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	if font:
+		l.add_theme_font_override("font", font)
+	return l
+
+
+func _icon(path: String, size := 26) -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = load(path)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.custom_minimum_size = Vector2(size, size)
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return t
+
+
+func _button(text: String, variation := "", cb: Callable = Callable()) -> Button:
+	var b := Button.new()
+	b.text = text
+	if variation != "":
+		b.theme_type_variation = variation
+	b.focus_mode = Control.FOCUS_NONE
+	if cb.is_valid():
+		b.pressed.connect(cb)
+	return b
+
+
+func _clear(n: Node) -> void:
+	for c in n.get_children():
+		c.queue_free()
+
+
+# ---------------- top bar ----------------
+func _build_top_bar() -> void:
+	var bar := PanelContainer.new()
+	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	bar.offset_bottom = 54
+	bar.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.88), App.GOLD_SOFT, 0, 0, 10))
+	root.add_child(bar)
+	blockers.append(bar)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 14)
+	bar.add_child(hb)
+	var title := _label("سرزمین پارسیان", 26, App.GOLD, App.font_display)
+	hb.add_child(title)
+	for k in Defs.RES_ORDER:
+		var chip := HBoxContainer.new()
+		chip.add_theme_constant_override("separation", 5)
+		chip.add_child(_icon(ICONS[k]))
+		var l := _label("۰", 20, App.IVORY, App.font_bold)
+		l.custom_minimum_size.x = 44
+		chip.add_child(l)
+		chip.tooltip_text = Defs.RES_NAMES[k]
+		res_labels[k] = l
+		hb.add_child(chip)
+	var pc := HBoxContainer.new()
+	pc.add_child(_icon("res://assets/icons/pop.svg"))
+	pop_label = _label("", 20, App.IVORY, App.font_bold)
+	pc.add_child(pop_label)
+	hb.add_child(pc)
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(sp)
+	var wc := HBoxContainer.new()
+	wc.add_child(_icon("res://assets/icons/timer.svg"))
+	wave_label = _label("", 18, Color("#ffb3a8"), App.font_bold)
+	wc.add_child(wave_label)
+	hb.add_child(wc)
+	speed_btn = _button("سرعت ×۱", "Ghost", _toggle_speed)
+	hb.add_child(speed_btn)
+	hb.add_child(_button("منو", "Ghost", _open_menu))
+
+
+func _toggle_speed() -> void:
+	Engine.time_scale = 2.0 if Engine.time_scale < 1.5 else 1.0
+	speed_btn.text = "سرعت ×۲" if Engine.time_scale > 1.5 else "سرعت ×۱"
+
+
+# ---------------- bottom build bar ----------------
+func _build_bottom_bar() -> void:
+	var holder := CenterContainer.new()
+	holder.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	holder.offset_top = -100
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(holder)
+	var bar := PanelContainer.new()
+	bar.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.9), App.GOLD_SOFT, 14, 2, 8))
+	holder.add_child(bar)
+	blockers.append(bar)
+	build_bar = HBoxContainer.new()
+	build_bar.add_theme_constant_override("separation", 6)
+	bar.add_child(build_bar)
+	for t in Defs.BUILD_MENU:
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(112, 80)
+		b.toggle_mode = true
+		var vb := VBoxContainer.new()
+		vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+		vb.alignment = BoxContainer.ALIGNMENT_CENTER
+		vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_theme_constant_override("separation", 0)
+		var n := _label(Defs.BUILDINGS[t].n, 17, App.IVORY, App.font_bold)
+		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var c := _label(Defs.cost_text(Defs.BUILDINGS[t].cost), 13, App.MUTED)
+		c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		c.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(n)
+		vb.add_child(c)
+		b.add_child(vb)
+		b.pressed.connect(func():
+			if world.mode == "build" and world.build_type == t:
+				world.cancel_build()
+			else:
+				world.start_build(t))
+		build_bar.add_child(b)
+		build_buttons[t] = b
+
+
+# ---------------- left tools ----------------
+func _build_side_tools() -> void:
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	vb.offset_left = 10
+	vb.offset_top = -40
+	vb.add_theme_constant_override("separation", 8)
+	vb.layout_direction = Control.LAYOUT_DIRECTION_RTL
+	root.add_child(vb)
+	blockers.append(vb)
+	for item in [["همه‌ی سپاه", world.select_all_army], ["رستم", world.select_hero], ["دژ ایران", world.focus_home], ["ایست", world.stop_selected]]:
+		var b := _button(item[0], "Ghost", item[1])
+		b.custom_minimum_size = Vector2(118, 46)
+		vb.add_child(b)
+	box_btn = _button("کادر انتخاب", "Ghost", world.toggle_box_mode)
+	box_btn.custom_minimum_size = Vector2(118, 46)
+	box_btn.toggle_mode = true
+	vb.add_child(box_btn)
+
+
+# ---------------- selection panel ----------------
+func _build_selection_panel() -> void:
+	sel_panel = PanelContainer.new()
+	sel_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	sel_panel.offset_left = -330
+	sel_panel.offset_right = -10
+	sel_panel.offset_top = 64
+	sel_panel.custom_minimum_size.x = 320
+	root.add_child(sel_panel)
+	blockers.append(sel_panel)
+	sel_box = VBoxContainer.new()
+	sel_box.add_theme_constant_override("separation", 6)
+	sel_panel.add_child(sel_box)
+
+
+func _on_selection() -> void:
+	_last_sig = _selection_signature()
+	_clear(sel_box)
+	for t in build_buttons:
+		build_buttons[t].set_pressed_no_signal(world.mode == "build" and world.build_type == t)
+	box_btn.set_pressed_no_signal(world.mode == "box")
+	build_panel.visible = world.mode == "build"
+	if world.mode == "build":
+		_refresh_build_hint()
+	var b: Building = world.selected_building
+	if world.selected.size() > 0:
+		_fill_units()
+	elif b != null and not b.dead:
+		_fill_building(b)
+	else:
+		sel_panel.visible = false
+		return
+	sel_panel.visible = true
+
+
+func _fill_units() -> void:
+	var counts := {}
+	var hp := 0.0
+	var max_hp := 0.0
+	for u: Unit in world.selected:
+		counts[u.type] = counts.get(u.type, 0) + 1
+		hp += u.hp
+		max_hp += u.max_hp
+	if world.selected.size() == 1:
+		var u: Unit = world.selected[0]
+		sel_box.add_child(_label(u.display_name(), 24, App.GOLD, App.font_display))
+		var desc: String = Defs.HEROES[0].desc if u.type == "hero" else Defs.UNITS[u.type].desc
+		var d := _label(desc, 15, App.MUTED)
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sel_box.add_child(d)
+		var ud: Dictionary = Defs.UNITS[u.type]
+		sel_box.add_child(_label("جان %s از %s · ضربه %s · بُرد %s" % [Defs.fa(int(u.hp)), Defs.fa(int(u.max_hp)), Defs.fa(ud.dmg), Defs.fa(int(ud.range))], 15))
+	else:
+		sel_box.add_child(_label("سپاه برگزیده: %s جنگجو" % Defs.fa(world.selected.size()), 22, App.GOLD, App.font_display))
+		var parts: PackedStringArray = []
+		for t in counts:
+			parts.append("%s %s" % [Defs.fa(counts[t]), Defs.unit_name(t, 0)])
+		var l := _label("، ".join(parts), 16)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sel_box.add_child(l)
+		sel_box.add_child(_label("جان سپاه: %s٪" % Defs.fa(int(100.0 * hp / maxf(1.0, max_hp))), 15, App.MUTED))
+	var hint := _label("روی زمین بزن تا بروند، روی دشمن بزن تا بجنگند.", 14, App.MUTED)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sel_box.add_child(hint)
+	var row := HBoxContainer.new()
+	row.add_child(_button("ایست", "", world.stop_selected))
+	row.add_child(_button("لغو انتخاب", "", world.clear_selection))
+	sel_box.add_child(row)
+
+
+func _fill_building(b: Building) -> void:
+	var title := b.display_name()
+	if b.type == "village":
+		title = "روستا · " + ("آزاد" if b.side < 0 else Defs.FACTIONS[b.side].n)
+	sel_box.add_child(_label(title, 24, App.GOLD, App.font_display))
+	var d := _label(Defs.BUILDINGS[b.type].desc, 15, App.MUTED)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sel_box.add_child(d)
+	if b.type != "village":
+		sel_box.add_child(_label("جان %s از %s" % [Defs.fa(int(b.hp)), Defs.fa(int(b.max_hp))], 15))
+	if b.side != Defs.IRAN:
+		return
+	match b.type:
+		"keep":
+			sel_box.add_child(_label("سطح %s · جمعیت %s" % [Defs.fa(b.level), Defs.fa(world.pop_cap(Defs.IRAN))], 16))
+			if b.level < Defs.KEEP_LEVELS.size():
+				var cost: Dictionary = Defs.KEEP_LEVELS[b.level].cost
+				var up := _button("ارتقا به سطح %s (%s)" % [Defs.fa(b.level + 1), Defs.cost_text(cost)], "Primary", world.upgrade_keep)
+				up.disabled = not world.afford(Defs.IRAN, cost)
+				up.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				sel_box.add_child(up)
+			else:
+				sel_box.add_child(_label("دژ در بالاترین سطح است.", 15, App.TURQ))
+		"barracks":
+			for t in Defs.TRAIN_MENU:
+				var ud: Dictionary = Defs.UNITS[t]
+				var btn := _button("%s  ·  %s" % [ud.n, Defs.cost_text(ud.cost)], "", world.train.bind(t))
+				var err: String = world.can_train(t)
+				btn.disabled = err != ""
+				btn.tooltip_text = err if err != "" else ud.desc
+				btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				sel_box.add_child(btn)
+			if b.queue.size() > 0:
+				var names: PackedStringArray = []
+				for q in b.queue:
+					names.append(Defs.UNITS[q].n)
+				var ql := _label("در حال آموزش: " + "، ".join(names), 14, App.TURQ)
+				ql.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				sel_box.add_child(ql)
+		_:
+			var bd: Dictionary = Defs.BUILDINGS[b.type]
+			if bd.has("res"):
+				sel_box.add_child(_label("هر %s ثانیه %s %s" % [Defs.fa(int(bd.every)), Defs.fa(bd.amt), Defs.RES_NAMES[bd.res]], 15, App.TURQ))
+	if b.type not in ["keep", "village"]:
+		sel_box.add_child(_button("تخریب (نیمی از هزینه برمی‌گردد)", "", world.demolish_selected))
+
+
+# ---------------- build mode panel ----------------
+func _build_build_panel() -> void:
+	build_panel = PanelContainer.new()
+	build_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	build_panel.offset_top = -176
+	build_panel.offset_bottom = -110
+	build_panel.offset_left = -300
+	build_panel.offset_right = 300
+	build_panel.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.92), App.GOLD, 12, 1, 10))
+	root.add_child(build_panel)
+	blockers.append(build_panel)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 10)
+	build_panel.add_child(hb)
+	build_hint = _label("", 16)
+	build_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	build_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hb.add_child(build_hint)
+	build_ok = _button("ساختن", "Primary", func(): world.confirm_build())
+	build_ok.custom_minimum_size = Vector2(110, 46)
+	hb.add_child(build_ok)
+	hb.add_child(_button("لغو", "", world.cancel_build))
+	build_panel.visible = false
+
+
+func _refresh_build_hint() -> void:
+	var t: String = world.build_type
+	if t == "":
+		return
+	var txt := ""
+	if t == "wall":
+		if world.wall_cells.size() <= 1:
+			txt = "سر دیوار را لمس کن، بعد ته آن را." if world.wall_start.x < 0 else "حالا ته دیوار را لمس کن."
+		else:
+			txt = "%s تکه دیوار · %s" % [Defs.fa(world.wall_cells.size()), Defs.cost_text({"stone": world.wall_cells.size() * Defs.BUILDINGS.wall.cost.stone})]
+	elif world.build_cell.x < 0:
+		txt = "جای %s را روی زمین لمس کن (درون مرز آبی)." % Defs.BUILDINGS[t].n
+	else:
+		txt = world.ghost_reason if world.ghost_reason != "" else "%s این‌جا ساخته می‌شود." % Defs.BUILDINGS[t].n
+	build_hint.text = txt
+	build_hint.add_theme_color_override("font_color", Color("#ff9d8f") if world.ghost_reason != "" and (world.build_cell.x >= 0 or world.wall_cells.size() > 1) else App.IVORY)
+	build_ok.disabled = not world.ghost_ok or (t == "wall" and world.wall_cells.size() < 1)
+
+
+# ---------------- toasts ----------------
+func _build_toasts() -> void:
+	toasts = VBoxContainer.new()
+	toasts.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	toasts.offset_top = 64
+	toasts.offset_left = -330
+	toasts.offset_right = 330
+	toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toasts.add_theme_constant_override("separation", 4)
+	root.add_child(toasts)
+
+
+func _on_message(text: String, side: int) -> void:
+	var p := PanelContainer.new()
+	var col: Color = Defs.faction_color[clampi(side, 0, 2)]
+	p.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.9), col.lightened(0.2), 18, 1, 12))
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l := _label(text, 17)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	p.add_child(l)
+	toasts.add_child(p)
+	while toasts.get_child_count() > 3:
+		toasts.get_child(0).free()
+	var tw := p.create_tween()
+	tw.tween_interval(4.5)
+	tw.tween_property(p, "modulate:a", 0.0, 0.8)
+	tw.tween_callback(p.queue_free)
+
+
+# ---------------- minimap ----------------
+func _build_minimap() -> void:
+	var frame := PanelContainer.new()
+	frame.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	frame.offset_left = 10
+	frame.offset_top = 64
+	frame.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.9), App.GOLD_SOFT, 8, 2, 4))
+	root.add_child(frame)
+	blockers.append(frame)
+	minimap = preload("res://scripts/ui/minimap.gd").new()
+	minimap.world = world
+	minimap.custom_minimum_size = Vector2(150, 150)
+	minimap.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	frame.add_child(minimap)
+
+
+# ---------------- dialogs ----------------
+func _frame(width := 560) -> PanelContainer:
+	var f := PanelContainer.new()
+	f.theme_type_variation = "Frame"
+	f.set_anchors_preset(Control.PRESET_CENTER)
+	f.custom_minimum_size = Vector2(width, 0)
+	f.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	f.grow_vertical = Control.GROW_DIRECTION_BOTH
+	f.visible = false
+	root.add_child(f)
+	return f
+
+
+func _build_dialogs() -> void:
+	dim = ColorRect.new()
+	dim.color = Color(0.02, 0.04, 0.1, 0.7)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.visible = false
+	root.add_child(dim)
+
+	menu_frame = _frame(420)
+	var mv := VBoxContainer.new()
+	mv.add_theme_constant_override("separation", 10)
+	menu_frame.add_child(mv)
+	var mt := _label("درنگ", 40, App.GOLD, App.font_display)
+	mt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mv.add_child(mt)
+	mv.add_child(_button("ادامه‌ی نبرد", "Primary", _close_menu))
+	mv.add_child(_button("راهنمای بازی", "", _open_help))
+	mv.add_child(_button("نبرد تازه", "", _restart))
+	mv.add_child(_button("منوی اصلی", "", _to_menu))
+
+	help_frame = _frame(640)
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(600, 440)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	help_frame.add_child(sc)
+	var hv := VBoxContainer.new()
+	hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hv.add_theme_constant_override("separation", 8)
+	sc.add_child(hv)
+	var ht := _label("راهنمای نبرد", 36, App.GOLD, App.font_display)
+	ht.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hv.add_child(ht)
+	for para in [
+		["هدف", "دژ افراسیاب را در شمال‌خاوری نقشه ویران کن. اگر دژ ایران ویران شود، شکست خورده‌ای."],
+		["دوربین", "با یک انگشت نقشه را جابه‌جا کن و با دو انگشت بزرگ و کوچکش کن."],
+		["سپاه", "روی سرباز بزن تا برگزیده شود؛ دو بار پشت سر هم بزن تا همه‌ی هم‌نوعانش برگزیده شوند. دکمه‌ی «کادر انتخاب» را بزن و روی نقشه بکش تا گروهی را برگزینی. بعد روی زمین بزن تا بروند یا روی دشمن تا بجنگند."],
+		["ساختن", "از نوار پایین ساختمانی برگزین، جایش را درون مرز آبی لمس کن و «ساختن» را بزن. هیزم‌شکن کنار جنگل و معدن کنار صخره‌های خاکستری کار می‌کند."],
+		["مردم و غذا", "هر ساختمان کارگاهی و هر سرباز یک نفر از جمعیت را می‌گیرد. خانه جمعیت را بیشتر می‌کند. همه غذا می‌خورند؛ اگر انبار خالی شود کارها کند می‌شود و سرباز نمی‌توانی بگیری."],
+		["سرزمین", "روستاهای میانه را با بردن سپاه به کنارشان بگیر. دیوها نگهبان روستاها هستند؛ رستم بر دیوها چیره‌تر است. هر روستا مرز ایران را گسترش می‌دهد و طلا و غذا می‌آورد."],
+		["دفاع", "توران هر چند دقیقه با سپاهی بزرگ‌تر حمله می‌کند. دیوار سنگی بکش، دروازه بگذار تا سپاهت بگذرد و برج تیرانداز بساز. دژ هم به دشمنان نزدیک تیر می‌بارد."],
+	]:
+		hv.add_child(_label(para[0], 22, App.GOLD, App.font_display))
+		var l := _label(para[1], 17)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 560
+		hv.add_child(l)
+	hv.add_child(_button("فهمیدم", "Primary", _close_help))
+
+	end_frame = _frame(520)
+	var ev := VBoxContainer.new()
+	ev.add_theme_constant_override("separation", 12)
+	end_frame.add_child(ev)
+	end_title = _label("", 46, App.GOLD, App.font_display)
+	end_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ev.add_child(end_title)
+	end_text = _label("", 18, App.MUTED)
+	end_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	end_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ev.add_child(end_text)
+	ev.add_child(_button("نبردی دیگر", "Primary", _restart))
+	ev.add_child(_button("منوی اصلی", "", _to_menu))
+
+
+func _open_menu() -> void:
+	get_tree().paused = true
+	dim.visible = true
+	menu_frame.visible = true
+
+
+func _close_menu() -> void:
+	get_tree().paused = false
+	dim.visible = false
+	menu_frame.visible = false
+
+
+func _open_help() -> void:
+	menu_frame.visible = false
+	help_frame.visible = true
+
+
+func _close_help() -> void:
+	help_frame.visible = false
+	menu_frame.visible = true
+
+
+func _restart() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	get_tree().reload_current_scene()
+
+
+func _to_menu() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+
+
+func _on_game_over(win: bool) -> void:
+	dim.visible = true
+	end_frame.visible = true
+	var mins := Defs.fa_time(world.time)
+	if win:
+		end_title.text = "پیروزی ایران"
+		end_text.text = "دژ افراسیاب پس از %s فروریخت و درفش کاویانی بر باروی توران برافراشته شد." % mins
+	else:
+		end_title.text = "شکست"
+		end_text.text = "سپاه توران پس از %s دژ ایران را گشود. دوباره بکوش." % mins
+
+
+# ---------------- per-frame ----------------
+func _process(delta: float) -> void:
+	_refresh_t -= delta
+	if _refresh_t <= 0.0:
+		_refresh_t = 0.25
+		_refresh()
+	overlay.queue_redraw()
+	minimap.queue_redraw()
+
+
+func _refresh() -> void:
+	var r: Dictionary = world.res[Defs.IRAN]
+	for k in res_labels:
+		res_labels[k].text = Defs.fa(int(r[k]))
+	res_labels["food"].add_theme_color_override("font_color", Color("#ff8a7a") if world.starving(Defs.IRAN) else App.IVORY)
+	var used: int = world.pop_used(Defs.IRAN)
+	var cap: int = world.pop_cap(Defs.IRAN)
+	pop_label.text = "%s/%s" % [Defs.fa(used), Defs.fa(cap)]
+	pop_label.add_theme_color_override("font_color", Color("#ffcf7a") if used >= cap else App.IVORY)
+	wave_label.text = "حمله‌ی توران: %s" % Defs.fa_time(world.ai.time_to_wave())
+	for t in build_buttons:
+		var cost: Dictionary = Defs.BUILDINGS[t].cost
+		build_buttons[t].modulate = Color.WHITE if world.afford(Defs.IRAN, cost) else Color(1, 1, 1, 0.55)
+	if world.mode == "build":
+		_refresh_build_hint()
+	# keep the panel's numbers live, but only rebuild it when something it shows has changed
+	var sig := _selection_signature()
+	if sig != _last_sig:
+		_last_sig = sig
+		_on_selection()
+
+
+var _last_sig := ""
+
+
+func _selection_signature() -> String:
+	var parts: PackedStringArray = [world.mode, world.build_type]
+	for u: Unit in world.selected:
+		parts.append("%d:%d" % [u.get_instance_id(), int(u.hp / 5.0)])
+	var b = world.selected_building
+	if b != null and is_instance_valid(b):
+		parts.append("b%d:%d:%d:%d:%d" % [b.get_instance_id(), int(b.hp / 20.0), b.level, b.queue.size(), b.side])
+		var r: Dictionary = world.res[Defs.IRAN]
+		if b.type in ["keep", "barracks"]:
+			parts.append("%d,%d,%d,%d,%d" % [r.wood / 5, r.stone / 5, r.food / 5, r.gold / 5, world.pop_used(Defs.IRAN)])
+	return "|".join(parts)
