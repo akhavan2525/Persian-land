@@ -39,7 +39,7 @@ PAL = {
     "tu_trouser": (0.30, 0.24, 0.20), "tu_black": (0.12, 0.10, 0.10),
 }
 CELLS = 8          # palette is CELLS x CELLS swatches
-CELL_PX = 8
+CELL_PX = 16
 _pal_index = {}
 METAL = {"steel", "iron", "gold", "bronze"}
 
@@ -61,8 +61,9 @@ def make_palette_image(name):
         for y in range(cy * CELL_PX, (cy + 1) * CELL_PX):
             for x in range(cx * CELL_PX, (cx + 1) * CELL_PX):
                 o = (y * size + x) * 4
-                # small vertical shade inside a swatch keeps nothing flat-looking
-                px[o:o + 4] = [r, g, b, 1.0]
+                # vertical shade inside a swatch: each part is darker at its bottom
+                k = 0.72 + 0.4 * (y - cy * CELL_PX) / (CELL_PX - 1)
+                px[o:o + 4] = [min(r * k, 1.0), min(g * k, 1.0), min(b * k, 1.0), 1.0]
     img.pixels = px
     return img
 
@@ -654,8 +655,12 @@ def build(name, fn):
         if not o.data.uv_layers:
             o.data.uv_layers.new(name="UVMap")
         u, v = pal_uv(col)
-        for l in o.data.uv_layers.active.data:
-            l.uv = (u, v)
+        zs = [(o.matrix_world @ vt.co).z for vt in o.data.vertices]
+        z0, z1 = min(zs), max(zs)
+        v_bottom = v - 0.5 / CELLS
+        for li, l in enumerate(o.data.uv_layers.active.data):
+            zn = (zs[o.data.loops[li].vertex_index] - z0) / max(z1 - z0, 1e-4)
+            l.uv = (u, v_bottom + (0.15 + 0.7 * zn) / CELLS)
         o["metal"] = col in METAL
         objs.append(o)
     # metal parts get their own material slot so they can shine
