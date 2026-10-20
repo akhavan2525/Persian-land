@@ -33,6 +33,7 @@ func build(seed_value: int) -> void:
 	detail.seed = seed_value + 7
 	detail.frequency = 0.09
 	_make_heights()
+	_paint_roads()
 	_classify()
 	_build_ground_mesh()
 	_build_water()
@@ -152,6 +153,8 @@ func _classify() -> void:
 				t = ROCK
 			elif _in_blob(p, _forests) + detail.get_noise_2d(p.x * 2.0, p.z * 2.0) * 0.35 > 0.15:
 				t = FOREST
+			if t == FOREST and road[int(p.z + HALF) * N + int(p.x + HALF)] > 0.3:
+				t = GRASS   # keep the roads free of trees
 			cell_type[j * G + i] = t
 	# keep castle and village grounds clear
 	for kc in Defs.KEEP_CELL:
@@ -168,25 +171,80 @@ func _clear_area(c: Vector2i, r: int) -> void:
 
 
 # ---------------- ground mesh ----------------
-func _ground_color(x: float, z: float, h: float, slope: float) -> Color:
+## Dirt roads that link both castles and the villages, as cell-coordinate polylines.
+func _road_lines() -> Array:
+	var ik: Vector2i = Defs.KEEP_CELL[0]
+	var tk: Vector2i = Defs.KEEP_CELL[1]
+	var v: Array = Defs.VILLAGE_CELLS
+	return [[ik, v[0]], [ik, v[1]], [v[1], tk], [v[2], tk], [v[1], v[2]], [v[0], v[1]]]
+
+
+var road := PackedFloat32Array()
+
+
+func _paint_roads() -> void:
+	road.resize(N * N)
+	road.fill(0.0)
+	for seg in _road_lines():
+		var a := cell_center_flat(seg[0])
+		var b := cell_center_flat(seg[1])
+		var steps := int(a.distance_to(b) / 1.5)
+		var side := Vector3(-(b.z - a.z), 0, b.x - a.x).normalized()
+		var prev := a
+		for k in range(1, steps + 1):
+			var t := float(k) / steps
+			# gentle bends, pinned at both ends
+			var bend := sin(t * PI) * noise.get_noise_2d(a.x + t * 40.0, a.z) * 14.0
+			var q := a.lerp(b, t) + side * bend
+			_stamp_road(prev, q)
+			prev = q
+
+
+func _stamp_road(a: Vector3, b: Vector3) -> void:
+	var r := 2.2
+	var x0 := int(minf(a.x, b.x) - r - 1.0 + HALF)
+	var x1 := int(maxf(a.x, b.x) + r + 1.0 + HALF)
+	var z0 := int(minf(a.z, b.z) - r - 1.0 + HALF)
+	var z1 := int(maxf(a.z, b.z) + r + 1.0 + HALF)
+	var ab := Vector2(b.x - a.x, b.z - a.z)
+	var len2 := maxf(ab.length_squared(), 0.001)
+	for j in range(maxi(z0, 0), mini(z1, N - 1) + 1):
+		for i in range(maxi(x0, 0), mini(x1, N - 1) + 1):
+			var pp := Vector2(i - HALF - a.x, j - HALF - a.z)
+			var t := clampf(pp.dot(ab) / len2, 0.0, 1.0)
+			var d := (pp - ab * t).length()
+			var wv := clampf((r - d) / 1.2, 0.0, 1.0)
+			if wv > road[j * N + i]:
+				road[j * N + i] = wv
+
+
+## Layer weights for one ground vertex: r = dirt, g = rock, b = sand, a = forest floor.
+func _ground_weights(i: int, j: int, h: float, slope: float) -> Color:
+	var x := i - HALF
+	var z := j - HALF
 	var n := noise.get_noise_2d(x * 4.0, z * 4.0) * 0.5 + 0.5
-	var grass := Color("#6f9a3e").lerp(Color("#9aa84a"), n)
-	grass = grass.lerp(Color("#b7a65c"), clampf(detail.get_noise_2d(x * 0.7, z * 0.7) * 0.8, 0.0, 0.55))
-	var c := grass
-	var forest := _in_blob(Vector3(x, 0, z), _forests)
-	if forest > 0.0:
-		c = c.lerp(Color("#4c6f2c"), clampf(forest * 2.0, 0.0, 0.8))
-	if h < Defs.WATER_LEVEL + 0.35:
-		c = c.lerp(Color("#cdb88a"), clampf((Defs.WATER_LEVEL + 0.35 - h) * 2.5, 0.0, 1.0))
-	if h < Defs.WATER_LEVEL - 0.3:
-		c = Color("#7d7356")
+	var pos := Vector3(x, 0, z)
+	var dirt := road[j * N + i] * 0.95
+	# trampled ground around the castles and villages
+	for kc in Defs.KEEP_CELL:
+		var c := cell_center_flat(kc)
+		var d := Vector2(x - c.x, z - c.z).length()
+		dirt = maxf(dirt, clampf((13.0 - d) / 6.0 + (n - 0.5) * 0.8, 0.0, 0.85))
+	for vc in Defs.VILLAGE_CELLS:
+		var c := cell_center_flat(vc)
+		var d := Vector2(x - c.x, z - c.z).length()
+		dirt = maxf(dirt, clampf((6.5 - d) / 3.0 + (n - 0.5) * 0.8, 0.0, 0.9))
+	# a few bare patches in the meadows
+	dirt = maxf(dirt, clampf((detail.get_noise_2d(x * 0.8, z * 0.8) - 0.45) * 2.5, 0.0, 0.6))
+	var forest := clampf(_in_blob(pos, _forests) * 2.5, 0.0, 1.0)
+	var sand := clampf((Defs.WATER_LEVEL + 0.2 - h) * 2.5, 0.0, 1.0)
 	var rock := clampf((slope - 0.55) * 2.5, 0.0, 1.0)
 	rock = maxf(rock, clampf((h - 2.8) * 0.6, 0.0, 1.0))
-	rock = maxf(rock, clampf(_in_blob(Vector3(x, 0, z), _rocks, 1.3) * 2.2, 0.0, 0.85))
-	c = c.lerp(Color("#8d8578").lerp(Color("#6e675d"), n), rock)
-	if h > 9.0:
-		c = c.lerp(Color("#f2efe8"), clampf((h - 9.0) * 0.35, 0.0, 1.0))
-	return c
+	rock = maxf(rock, clampf(_in_blob(pos, _rocks, 1.3) * 2.6, 0.0, 0.95))
+	dirt *= 1.0 - rock
+	dirt *= 1.0 - sand
+	sand *= 1.0 - rock
+	return Color(dirt, rock, sand, forest * (1.0 - dirt))
 
 
 func _build_ground_mesh() -> void:
@@ -203,7 +261,7 @@ func _build_ground_mesh() -> void:
 			var hz := heights[mini(j + 1, N - 1) * N + i] - heights[maxi(j - 1, 0) * N + i]
 			var nrm := Vector3(-hx * 0.5, 1.0, -hz * 0.5).normalized()
 			var slope := 1.0 - nrm.y
-			st.set_color(_ground_color(x, z, h, slope * 4.0))
+			st.set_color(_ground_weights(i, j, h, slope * 4.0))
 			st.set_normal(nrm)
 			st.set_uv(Vector2(x, z))
 			st.add_vertex(Vector3(x, h, z))
@@ -221,6 +279,10 @@ func _build_ground_mesh() -> void:
 	mi.mesh = mesh
 	terrain_material = ShaderMaterial.new()
 	terrain_material.shader = load("res://assets/shaders/terrain.gdshader")
+	for layer in ["grass", "dirt", "rock", "sand"]:
+		terrain_material.set_shader_parameter(layer + "_tex", load("res://assets/textures/ground/%s_albedo.png" % layer))
+		if layer != "sand":
+			terrain_material.set_shader_parameter(layer + "_nrm", load("res://assets/textures/ground/%s_normal.png" % layer))
 	mi.material_override = terrain_material
 	add_child(mi)
 
@@ -282,68 +344,117 @@ static func vc_material(rough := 0.9) -> StandardMaterial3D:
 	return m
 
 
+## Loads a nature GLB and returns its mesh with game materials: leaves get the foliage
+## shader, everything else a lit material tinted by the per-instance colour.
+func _nature_mesh(file: String) -> Mesh:
+	var ps: PackedScene = load("res://assets/models/nature/%s.glb" % file)
+	var inst := ps.instantiate()
+	var mi: MeshInstance3D = inst.find_children("*", "MeshInstance3D", true, false)[0]
+	var mesh: Mesh = mi.mesh.duplicate()
+	for i in mesh.get_surface_count():
+		var src := mesh.surface_get_material(i) as BaseMaterial3D
+		var tex: Texture2D = src.albedo_texture if src else null
+		if src and src.resource_name.begins_with("leaves"):
+			var fm := ShaderMaterial.new()
+			fm.shader = load("res://assets/shaders/foliage.gdshader")
+			fm.set_shader_parameter("leaf_tex", tex)
+			mesh.surface_set_material(i, fm)
+		else:
+			var m := StandardMaterial3D.new()
+			m.albedo_texture = tex
+			m.vertex_color_use_as_albedo = true
+			m.roughness = 0.95
+			mesh.surface_set_material(i, m)
+	inst.free()
+	return mesh
+
+
+## Instances grouped in 20 m chunks, so the camera only draws the chunks it can see.
+func _chunked(mesh: Mesh, xforms: Array, colors: Array, shadows := true) -> void:
+	var chunks := {}
+	for i in xforms.size():
+		var o: Vector3 = xforms[i].origin
+		var key := Vector2i(int(floor(o.x / 20.0)), int(floor(o.z / 20.0)))
+		if not chunks.has(key):
+			chunks[key] = [[], []]
+		chunks[key][0].append(xforms[i])
+		chunks[key][1].append(colors[i])
+	for key in chunks:
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = mesh
+		var xs: Array = chunks[key][0]
+		mm.instance_count = xs.size()
+		for i in xs.size():
+			mm.set_instance_transform(i, xs[i])
+			mm.set_instance_color(i, chunks[key][1][i])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mmi)
+
+
+func _near_castle_or_road(p: Vector3) -> bool:
+	if road[int(clampf(p.z + HALF, 0, N - 1)) * N + int(clampf(p.x + HALF, 0, N - 1))] > 0.05:
+		return true
+	for kc in Defs.KEEP_CELL:
+		if Vector2(p.x, p.z).distance_to(Vector2(cell_center_flat(kc).x, cell_center_flat(kc).z)) < 17.0:
+			return true
+	for vc in Defs.VILLAGE_CELLS:
+		if Vector2(p.x, p.z).distance_to(Vector2(cell_center_flat(vc).x, cell_center_flat(vc).z)) < 8.0:
+			return true
+	return false
+
+
 func _scatter_trees() -> void:
-	var cypress := SphereMesh.new()
-	cypress.radius = 0.75
-	cypress.height = 4.6
-	cypress.radial_segments = 8
-	cypress.rings = 6
-	var round_top := SphereMesh.new()
-	round_top.radius = 1.5
-	round_top.height = 2.6
-	round_top.radial_segments = 8
-	round_top.rings = 5
-	var trunk := CylinderMesh.new()
-	trunk.top_radius = 0.14
-	trunk.bottom_radius = 0.22
-	trunk.height = 1.6
-	trunk.radial_segments = 5
-	var cx := []; var cc := []; var rx := []; var rc := []; var tx := []; var tc := []
+	var kinds := ["tree_chenar_a", "tree_chenar_b", "tree_cypress"]
+	var xf := [[], [], []]
+	var cols := [[], [], []]
 	for j in G:
 		for i in G:
-			if cell_type[j * G + i] != FOREST:
-				continue
+			var t := cell_type[j * G + i]
 			var base := cell_center(Vector2i(i, j))
-			var count := 1 + rng.randi() % 2
-			for _k in count:
-				var p := base + Vector3(rng.randf_range(-0.8, 0.8), 0, rng.randf_range(-0.8, 0.8))
-				p.y = height_at(p.x, p.z)
-				var s := rng.randf_range(0.8, 1.25)
-				var rot := Basis(Vector3.UP, rng.randf() * TAU)
-				tx.append(Transform3D(rot.scaled(Vector3(s, s, s)), p + Vector3(0, 0.75 * s, 0)))
-				tc.append(Color("#5d4128"))
-				if rng.randf() < 0.55:
-					cx.append(Transform3D(rot.scaled(Vector3(s, s * rng.randf_range(0.9, 1.2), s)), p + Vector3(0, 2.6 * s, 0)))
-					cc.append(Color("#2f5a2c").lerp(Color("#3f6d33"), rng.randf()))
-				else:
-					rx.append(Transform3D(rot.scaled(Vector3(s, s, s)), p + Vector3(0, 2.3 * s, 0)))
-					rc.append(Color("#4f7a2e").lerp(Color("#6b8f35"), rng.randf()))
-	var leaf := vc_material(0.85)
-	_multimesh(trunk, tx, tc, vc_material())
-	_multimesh(cypress, cx, cc, leaf)
-	_multimesh(round_top, rx, rc, leaf)
+			var lone := t == GRASS and rng.randf() < 0.012 and not _near_castle_or_road(base)
+			if t != FOREST and not lone:
+				continue
+			if t == FOREST and rng.randf() < 0.18:
+				continue   # small clearings
+			var p := base + Vector3(rng.randf_range(-0.7, 0.7), 0, rng.randf_range(-0.7, 0.7))
+			p.y = height_at(p.x, p.z) - 0.1
+			var k := 2 if rng.randf() < (0.45 if lone else 0.28) else rng.randi() % 2
+			var s := rng.randf_range(0.75, 1.15) * (0.85 if k < 2 else 1.0)
+			var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s))
+			xf[k].append(Transform3D(b, p))
+			var hue := rng.randf()
+			cols[k].append(Color(0.9 + hue * 0.25, 0.95 + hue * 0.15, 0.85 + hue * 0.1))
+	for k in 3:
+		if xf[k].size() > 0:
+			_chunked(_nature_mesh(kinds[k]), xf[k], cols[k])
 
 
 func _scatter_rocks() -> void:
-	var rock := SphereMesh.new()
-	rock.radius = 1.0
-	rock.height = 1.4
-	rock.radial_segments = 6
-	rock.rings = 3
-	var xs := []; var cs := []
+	var kinds := ["rock_a", "rock_b", "rock_c"]
+	var xf := [[], [], []]
+	var cols := [[], [], []]
 	for j in G:
 		for i in G:
-			if cell_type[j * G + i] != ROCK:
+			var t := cell_type[j * G + i]
+			if t != ROCK and not (t == MOUNTAIN and rng.randf() < 0.12):
 				continue
 			var base := cell_center(Vector2i(i, j))
-			for _k in 2:
-				var p := base + Vector3(rng.randf_range(-0.7, 0.7), 0, rng.randf_range(-0.7, 0.7))
-				p.y = height_at(p.x, p.z)
-				var s := Vector3(rng.randf_range(0.6, 1.2), rng.randf_range(0.5, 1.1), rng.randf_range(0.6, 1.2))
-				var b := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.3, 0.3))
-				xs.append(Transform3D(b.scaled(s), p + Vector3(0, 0.25, 0)))
-				cs.append(Color("#9a9286").lerp(Color("#76706a"), rng.randf()))
-	_multimesh(rock, xs, cs, vc_material(1.0))
+			for _k in (2 if t == ROCK else 1):
+				var p := base + Vector3(rng.randf_range(-0.8, 0.8), 0, rng.randf_range(-0.8, 0.8))
+				p.y = height_at(p.x, p.z) - 0.15
+				var k := rng.randi() % 3
+				var s := rng.randf_range(0.55, 1.1) * (1.6 if t == MOUNTAIN else 1.0)
+				var b := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.2, 0.2))
+				xf[k].append(Transform3D(b.scaled(Vector3(s, s * rng.randf_range(0.7, 1.1), s)), p))
+				var g := rng.randf_range(0.85, 1.1)
+				cols[k].append(Color(g, g * 0.98, g * 0.95))
+	for k in 3:
+		if xf[k].size() > 0:
+			_chunked(_nature_mesh(kinds[k]), xf[k], cols[k])
 
 
 func _scatter_grass() -> void:

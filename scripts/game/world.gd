@@ -102,7 +102,7 @@ func _setup_environment() -> void:
 	sky.sky_material = psm
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.75
+	env.ambient_light_energy = 0.6
 	env.ambient_light_sky_contribution = 0.85
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 0.95
@@ -112,18 +112,18 @@ func _setup_environment() -> void:
 	env.glow_bloom = 0.05
 	env.fog_enabled = true
 	env.fog_light_color = Color("#d8c7a8")
-	env.fog_density = 0.0022
+	env.fog_density = 0.0016
 	env.fog_sky_affect = 0.3
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.12
-	env.adjustment_contrast = 1.05
+	env.adjustment_saturation = 1.08
+	env.adjustment_contrast = 1.1
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	sun = DirectionalLight3D.new()
 	sun.rotation = Vector3(deg_to_rad(-48), deg_to_rad(-62), 0)
-	sun.light_color = Color("#ffe6c4")
-	sun.light_energy = 1.35
+	sun.light_color = Color("#ffe2b8")
+	sun.light_energy = 1.55
 	sun.shadow_enabled = true
 	sun.shadow_bias = 0.04
 	sun.shadow_normal_bias = 1.2
