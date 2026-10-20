@@ -153,6 +153,9 @@ static func _aabb(n: Node, xf: Transform3D) -> AABB:
 		t = xf * (n as Node3D).transform
 	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
 		var a := t * (n as MeshInstance3D).mesh.get_aabb()
+		if (n as MeshInstance3D).skin != null:
+			# skinned meshes are posed by their skeleton; the armature scale does not apply
+			a = (n as MeshInstance3D).mesh.get_aabb()
 		out = a
 		first = false
 	for c in n.get_children():

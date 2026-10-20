@@ -293,6 +293,18 @@ func _process(delta: float) -> void:
 		var want = anim_names.get("attack") if swing_t > 0.0 else (anim_names.get("walk") if moving else anim_names.get("idle"))
 		if want != null and anim.current_animation != want:
 			anim.play(want, 0.15)
+		elif want == null and not moving and anim.is_playing() and swing_t <= 0.0:
+			# model has no idle clip: hold the first frame of the walk instead of walking on the spot
+			anim.seek(0.0, true)
+			anim.pause()
+		if swing_t > 0.0 and not anim_names.has("attack"):
+			# model has no attack clip: lunge forward and back
+			var k := swing_t / 0.35
+			model.position.z = -sin(k * PI) * 0.35
+			model.rotation.x = -sin(k * PI) * 0.12
+		elif not anim_names.has("attack"):
+			model.position.z = 0.0
+			model.rotation.x = 0.0 if _fall <= 0.0 else model.rotation.x
 		swing_t = maxf(0.0, swing_t - delta)
 		return
 	if moving:
