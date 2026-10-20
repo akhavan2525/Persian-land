@@ -38,6 +38,15 @@ func _ready() -> void:
 			var shot = load("res://scripts/dev/autoshot.gd").new()
 			shot.out = a.substr(8)
 			add_child(shot)
+		if a.begins_with("--view="):
+			# --view=<png>[:units|buildings]
+			var parts := a.substr(7).split(":")
+			var v = load("res://scripts/dev/viewer.gd").new()
+			v.out = parts[0]
+			if parts.size() > 1:
+				v.what = ":".join(parts.slice(1))
+			get_tree().root.add_child.call_deferred(v)
+			get_tree().current_scene.queue_free.call_deferred()
 
 
 # ---------------- UI theme ----------------

@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://bo0to3qr5neei"
+path="res://.godot/imported/immortal_iran_immortal_iran_pal.png-486ee35b9ab72c0264e5cbce8ed6a722.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "ca309cfe5308d9606cca05ac6429d547"
+}
+
+[deps]
+
+source_file="res://assets/models/units/immortal_iran_immortal_iran_pal.png"
+dest_files=["res://.godot/imported/immortal_iran_immortal_iran_pal.png-486ee35b9ab72c0264e5cbce8ed6a722.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

@@ -509,7 +509,7 @@ func _finish(win: bool) -> void:
 # ---------------- economy ----------------
 func pop_cap(side: int) -> int:
 	var k = keeps[side]
-	var cap: int = Defs.KEEP_LEVELS[k.level - 1].pop_cap if k else 0
+	var cap: int = Defs.KEEP_LEVELS[k.level - 1].pop_cap if k and is_instance_valid(k) else 0
 	for b: Building in buildings:
 		if b.side == side and b.type == "house":
 			cap += Defs.BUILDINGS.house.pop_cap

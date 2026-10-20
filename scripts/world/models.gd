@@ -115,7 +115,7 @@ static func pivot(parent: Node3D, pos: Vector3, nm: String) -> Node3D:
 
 
 # ---------------- GLB override ----------------
-static func load_override(kind: String, type: String, owner: int, target_height: float) -> Node3D:
+static func load_override(kind: String, type: String, owner: int, target_height: float, footprint := 0.0) -> Node3D:
 	var faction: String = FACTION_KEY[clampi(owner, 0, 2)]
 	for path in ["res://assets/models/%s/%s_%s.glb" % [kind, type, faction], "res://assets/models/%s/%s.glb" % [kind, type]]:
 		if ResourceLoader.exists(path):
@@ -129,8 +129,18 @@ static func load_override(kind: String, type: String, owner: int, target_height:
 			var aabb := _aabb(inst, Transform3D.IDENTITY)
 			if aabb.size.y > 0.001:
 				var k := target_height / aabb.size.y
+				if inst.find_child("TRUE_SCALE", true, false):
+					k = 1.0   # our Blender models are made at real size
+				elif footprint > 0.0:
+					# buildings fill their footprint on the ground
+					k = footprint / maxf(aabb.size.x, aabb.size.z)
 				inst.scale = Vector3.ONE * k
-				inst.position = Vector3(-aabb.get_center().x * k, -aabb.position.y * k, -aabb.get_center().z * k)
+				var rigged := inst.find_children("*", "Skeleton3D", true, false).size() > 0
+				if rigged:
+					# rigged soldiers are modelled around their feet; weapons must not shift them
+					inst.position = Vector3(0, -aabb.position.y * k, 0)
+				else:
+					inst.position = Vector3(-aabb.get_center().x * k, -aabb.position.y * k, -aabb.get_center().z * k)
 			return holder
 	return null
 
@@ -339,7 +349,8 @@ static func _build_building(type: String, owner: int, level := 1) -> Node3D:
 	var size: int = Defs.BUILDINGS[type].size
 	var target := {"keep": 9.0 + level * 1.5, "house": 3.5, "farm": 2.5, "woodcutter": 3.2, "quarry": 3.0,
 		"barracks": 4.5, "tower": 7.0, "wall": 3.2, "gate": 3.8, "village": 4.0}
-	var glb := load_override("buildings", type, owner, target.get(type, 3.0))
+	var fit := {"keep": 0.84 + level * 0.08, "tower": 1.1, "house": 0.9, "village": 0.95, "farm": 1.0, "barracks": 0.98}
+	var glb := load_override("buildings", type, owner, target.get(type, 3.0), size * Defs.CELL * fit.get(type, 0.96))
 	if glb:
 		return glb
 	var root := Node3D.new()

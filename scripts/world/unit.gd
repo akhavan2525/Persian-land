@@ -61,6 +61,12 @@ func setup(w: Node, t: String, o: int, pos: Vector3) -> void:
 					anim_names[k] = a
 		if anim_names.has("run") and not anim_names.has("walk"):
 			anim_names["walk"] = anim_names["run"]
+		for k in ["idle", "walk"]:
+			if anim_names.has(k):
+				anim.get_animation(anim_names[k]).loop_mode = Animation.LOOP_LINEAR
+		if anim_names.has("attack"):
+			anim.get_animation(anim_names["attack"]).loop_mode = Animation.LOOP_NONE
+		anim.speed_scale = randf_range(0.92, 1.08)
 	# selection ring
 	ring = MeshInstance3D.new()
 	var tm := TorusMesh.new()
@@ -196,6 +202,10 @@ func _attack_tick(dt: float) -> void:
 		if cd <= 0.0:
 			cd = def.cd * randf_range(0.9, 1.1)
 			swing_t = 0.35
+			if anim and anim_names.has("attack"):
+				swing_t = anim.get_animation(anim_names["attack"]).length / anim.speed_scale
+				anim.play(anim_names["attack"], 0.08)
+				anim.seek(0.0, true)
 			if type == "archer":
 				world.spawn_arrow(self, target, def.dmg)
 			else:

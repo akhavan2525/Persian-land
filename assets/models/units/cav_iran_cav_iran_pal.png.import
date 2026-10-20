@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://bkhsxt0kmjx5o"
+path="res://.godot/imported/cav_iran_cav_iran_pal.png-789c4eee2116827766a6b5ef5e1db913.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "daba7fa97a6378a00d32590144d983d9"
+}
+
+[deps]
+
+source_file="res://assets/models/units/cav_iran_cav_iran_pal.png"
+dest_files=["res://.godot/imported/cav_iran_cav_iran_pal.png-789c4eee2116827766a6b5ef5e1db913.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1
