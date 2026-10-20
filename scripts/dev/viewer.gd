@@ -73,7 +73,7 @@ func _ready() -> void:
 	if what.begins_with("anim:"):
 		# anim:<type>:<side> shows idle, two walk frames and two attack frames up close
 		var bits := what.split(":")
-		var shots := [["idle", 0.0], ["walk", 0.0], ["walk", 0.33], ["attack", 0.3], ["attack", 0.45]]
+		var shots := [["idle", 0.0], ["walk", 0.3], ["attack", 0.25], ["attack", 0.4], ["attack", 0.55]]
 		for i in shots.size():
 			var m := Models.make_unit(bits[1], int(bits[2]))
 			var n: Node3D = m.root
