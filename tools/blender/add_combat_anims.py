@@ -143,6 +143,10 @@ for pb in bones:
     pb.rotation_quaternion = (1, 0, 0, 0)
     pb.location = (0, 0, 0)
 arm.animation_data.action = bpy.data.actions["idle_loop"]
+# phones do not need 4K textures; 1024 keeps the install file small
+for img in bpy.data.images:
+    if img.size[0] > 1024:
+        img.scale(1024, int(1024 * img.size[1] / img.size[0]))
 bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", export_animations=True, export_animation_mode="ACTIONS",
-                          export_force_sampling=True, export_image_format="AUTO", export_skins=True)
+                          export_force_sampling=True, export_image_format="JPEG", export_jpeg_quality=88, export_skins=True)
 print("exported", OUT, [a.name for a in bpy.data.actions])
