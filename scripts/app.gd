@@ -14,6 +14,11 @@ const CRIMSON := Color("#d0574b")
 
 var difficulty := "normal"
 var music_on := true
+var stage := 0                 # campaign stage being played (index into Defs.STAGES)
+var unlocked := 1              # how many stages the player may choose
+var best := {}                 # "stage:difficulty" -> best time in seconds
+
+const SAVE_PATH := "user://progress.cfg"
 
 var font_regular: Font
 var font_bold: Font
@@ -31,7 +36,11 @@ func _ready() -> void:
 	font_display = lalezar.duplicate()
 	font_display.fallbacks = [font_black]
 	theme = _make_theme()
+	load_progress()
 	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--stage="):
+			stage = clampi(int(a.substr(8)), 0, Defs.STAGES.size() - 1)
+			unlocked = Defs.STAGES.size()
 		if a == "--sim":
 			add_child(load("res://scripts/dev/sim.gd").new())
 		if a.begins_with("--powertest="):
@@ -40,6 +49,12 @@ func _ready() -> void:
 			add_child(pt)
 		if a == "--wavetest":
 			add_child(load("res://scripts/dev/wavetest.gd").new())
+		if a.begins_with("--stageshots="):
+			var ss = load("res://scripts/dev/stageshot.gd").new()
+			ss.out = a.substr(13)
+			add_child(ss)
+		if a == "--chaintest":
+			add_child(load("res://scripts/dev/chaintest.gd").new())
 		if a == "--pathtest":
 			add_child(load("res://scripts/dev/pathtest.gd").new())
 		if a.begins_with("--shots="):
@@ -55,6 +70,41 @@ func _ready() -> void:
 				v.what = ":".join(parts.slice(1))
 			get_tree().root.add_child.call_deferred(v)
 			get_tree().current_scene.queue_free.call_deferred()
+
+
+# ---------------- campaign progress ----------------
+func load_progress() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(SAVE_PATH) != OK:
+		return
+	unlocked = clampi(int(cf.get_value("campaign", "unlocked", 1)), 1, Defs.STAGES.size())
+	stage = clampi(int(cf.get_value("campaign", "stage", 0)), 0, unlocked - 1)
+	difficulty = str(cf.get_value("campaign", "difficulty", "normal"))
+	if not Defs.DIFFICULTY.has(difficulty):
+		difficulty = "normal"
+	best = cf.get_value("campaign", "best", {})
+
+
+func save_progress() -> void:
+	var cf := ConfigFile.new()
+	cf.set_value("campaign", "unlocked", unlocked)
+	cf.set_value("campaign", "stage", stage)
+	cf.set_value("campaign", "difficulty", difficulty)
+	cf.set_value("campaign", "best", best)
+	cf.save(SAVE_PATH)
+
+
+## Called when Afrasiab's keep falls: opens the next stage.
+func stage_won(seconds: float) -> void:
+	var key := "%d:%s" % [stage, difficulty]
+	if not best.has(key) or seconds < float(best[key]):
+		best[key] = seconds
+	unlocked = maxi(unlocked, mini(stage + 2, Defs.STAGES.size()))
+	save_progress()
+
+
+func stage_def() -> Dictionary:
+	return Defs.STAGES[clampi(stage, 0, Defs.STAGES.size() - 1)]
 
 
 # ---------------- UI theme ----------------
@@ -135,6 +185,23 @@ func _make_theme() -> Theme:
 	t.set_color("font_color", "Ghost", GOLD)
 	t.set_color("font_hover_color", "Ghost", GOLD)
 	t.set_font_size("font_size", "Ghost", 16)
+
+	# Plaque: the painted wood-and-lapis side button
+	t.add_type("Plaque")
+	t.set_type_variation("Plaque", "Button")
+	var pm := Vector4(34, 10, 34, 10)
+	var pc := Vector4(30, 6, 30, 8)
+	t.set_stylebox("normal", "Plaque", tex_box("res://assets/ui/side_button.png", pm, pc))
+	t.set_stylebox("hover", "Plaque", tex_box("res://assets/ui/side_button.png", pm, pc, Color(1.12, 1.08, 1.0)))
+	t.set_stylebox("pressed", "Plaque", tex_box("res://assets/ui/side_button.png", pm, pc, Color(1.35, 1.2, 0.85)))
+	t.set_stylebox("focus", "Plaque", StyleBoxEmpty.new())
+	for c in ["font_color", "font_hover_color", "font_focus_color"]:
+		t.set_color(c, "Plaque", Color("#f6e7bf"))
+	t.set_color("font_pressed_color", "Plaque", Color("#ffe18a"))
+	t.set_color("font_outline_color", "Plaque", Color(0, 0, 0, 0.75))
+	t.set_constant("outline_size", "Plaque", 4)
+	t.set_font("font", "Plaque", font_bold)
+	t.set_font_size("font_size", "Plaque", 15)
 
 	# Panels
 	t.set_stylebox("panel", "PanelContainer", box(Color(LAPIS_2, 0.94), LINE, 12, 1, 12))

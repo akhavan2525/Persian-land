@@ -26,21 +26,105 @@ var _rocks := [Vector3(-30, 56, 5.5), Vector3(-62, 34, 4.5), Vector3(30, -56, 5.
 	Vector3(-4, -2, 4.0), Vector3(4, 2, 4.0), Vector3(-18, 30, 4.0), Vector3(18, -30, 4.0)]
 
 
-func build(seed_value: int) -> void:
+var biome := "meadow"
+
+
+## Builds the land. The first stage keeps its hand-made layout; later stages scatter
+## lakes, woods and rocks from the seed in amounts that suit their biome.
+func build(seed_value: int, biome_name := "meadow", layout_seed := 0) -> void:
+	biome = biome_name
+	if layout_seed != 0:
+		_gen_layout(layout_seed)
 	rng.seed = seed_value
 	noise.seed = seed_value
 	noise.frequency = 0.018
 	noise.fractal_octaves = 4
 	detail.seed = seed_value + 7
 	detail.frequency = 0.09
+	_paint_roads()      # first, so lakes and rocks can keep clear of the roads
 	_make_heights()
-	_paint_roads()
 	_classify()
 	_build_ground_mesh()
 	_build_water()
 	_build_far_ground()
 	_scatter_trees()
 	_scatter_rocks()
+
+
+# ---------------- stage layouts ----------------
+## How many lakes, woods and rocks each biome gets, with their size ranges.
+const LAYOUT := {
+	"meadow": {"lakes": [4, 6.0, 12.0], "forests": [10, 7.0, 13.0], "rocks": [8, 4.0, 5.5]},
+	"steppe": {"lakes": [2, 6.0, 9.0], "forests": [5, 6.0, 10.0], "rocks": [11, 4.0, 6.0]},
+	"forest": {"lakes": [3, 6.0, 10.0], "forests": [17, 9.0, 14.0], "rocks": [6, 4.0, 5.0]},
+	"snow": {"lakes": [4, 7.0, 12.0], "forests": [10, 7.0, 12.0], "rocks": [11, 4.0, 6.0]},
+	"desert": {"lakes": [2, 5.0, 7.0], "forests": [4, 4.0, 7.0], "rocks": [15, 4.0, 6.5]},
+}
+
+
+## Ground and tree colours per biome. grass: tint on the grass texture; snow/sand: cover on top.
+const LOOK := {
+	"meadow": {"grass": Color(1, 1, 1), "snow": 0.0, "sand": 0.0, "leaf": Color(1, 1, 1), "leaf_snow": 0.0, "ice": 0.0, "far": Color("#7c7466"), "cypress": 0.28},
+	"steppe": {"grass": Color(1.18, 1.02, 0.62), "snow": 0.0, "sand": 0.15, "leaf": Color(1.25, 1.0, 0.55), "leaf_snow": 0.0, "ice": 0.0, "far": Color("#8f7f5c"), "cypress": 0.35},
+	"forest": {"grass": Color(0.78, 0.92, 0.72), "snow": 0.0, "sand": 0.0, "leaf": Color(0.85, 1.0, 0.85), "leaf_snow": 0.0, "ice": 0.0, "far": Color("#4e5a45"), "cypress": 0.22},
+	"snow": {"grass": Color(0.85, 0.9, 0.95), "snow": 0.92, "sand": 0.0, "leaf": Color(0.7, 0.85, 0.8), "leaf_snow": 0.38, "ice": 1.0, "far": Color("#c9d2dc"), "cypress": 0.75},
+	"desert": {"grass": Color(1.3, 1.1, 0.7), "snow": 0.0, "sand": 0.85, "leaf": Color(1.05, 1.05, 0.8), "leaf_snow": 0.0, "ice": 0.0, "far": Color("#b99a6a"), "cypress": 0.5},
+}
+
+
+func look() -> Dictionary:
+	return LOOK.get(biome, LOOK.meadow)
+
+
+func _gen_layout(layout_seed: int) -> void:
+	var r := RandomNumberGenerator.new()
+	r.seed = layout_seed
+	var lay: Dictionary = LAYOUT.get(biome, LAYOUT.meadow)
+	var keeps := []
+	for kc in Defs.KEEP_CELL:
+		keeps.append(cell_center_flat(kc))
+	var vills := []
+	for vc in Defs.VILLAGE_CELLS:
+		vills.append(cell_center_flat(vc))
+	var segs := []
+	for seg in _road_lines():
+		segs.append([cell_center_flat(seg[0]), cell_center_flat(seg[1])])
+	_lakes = _scatter_blobs(r, lay.lakes, keeps, vills, segs, 1.6, 2.0)
+	_rocks = _scatter_blobs(r, lay.rocks, keeps, vills, segs, 1.8, 1.0)
+	_forests = _scatter_blobs(r, lay.forests, keeps, vills, [], 1.0, 0.0)
+
+
+## Places blobs (x, z, radius) away from the castles, the villages and (if given) the roads.
+func _scatter_blobs(r: RandomNumberGenerator, spec: Array, keeps: Array, vills: Array, segs: Array, reach: float, road_gap: float) -> Array:
+	var out := []
+	var tries := 0
+	while out.size() < spec[0] and tries < 400:
+		tries += 1
+		var rad := r.randf_range(spec[1], spec[2])
+		var p := Vector3(r.randf_range(-HALF * 0.78, HALF * 0.78), 0, r.randf_range(-HALF * 0.78, HALF * 0.78))
+		var ok := true
+		for k in keeps:
+			if Vector2(p.x - k.x, p.z - k.z).length() < rad * reach + 22.0:
+				ok = false
+		for v in vills:
+			if Vector2(p.x - v.x, p.z - v.z).length() < rad * reach + 9.0:
+				ok = false
+		for sg in segs:
+			if _dist_to_segment(p, sg[0], sg[1]) < rad * reach + road_gap:
+				ok = false
+		for o in out:
+			if Vector2(p.x - o.x, p.z - o.y).length() < (rad + o.z) * 0.9:
+				ok = false
+		if ok:
+			out.append(Vector3(p.x, p.z, rad))
+	return out
+
+
+static func _dist_to_segment(p: Vector3, a: Vector3, b: Vector3) -> float:
+	var ab := Vector2(b.x - a.x, b.z - a.z)
+	var ap := Vector2(p.x - a.x, p.z - a.z)
+	var t := clampf(ap.dot(ab) / maxf(ab.length_squared(), 0.001), 0.0, 1.0)
+	return (ap - ab * t).length()
 
 
 # ---------------- height field ----------------
@@ -61,15 +145,17 @@ func _raw_height(x: float, z: float) -> float:
 		var c := cell_center_flat(vc)
 		var d := Vector2(x - c.x, z - c.z).length()
 		h = lerpf(0.3, h, clampf((d - 6.0) / 6.0, 0.0, 1.0))
+	var on_road := road[int(clampf(z + HALF, 0, N - 1)) * N + int(clampf(x + HALF, 0, N - 1))] if road.size() == N * N else 0.0
+	var keep_dry := 1.0 - clampf(on_road * 1.6, 0.0, 1.0)   # a road never sinks into a lake
 	for l in _lakes:
 		var d := Vector2(x - l.x, z - l.y).length()
 		if d < l.z * 1.6:
 			var k := 1.0 - clampf(d / (l.z * 1.6), 0.0, 1.0)
-			h -= smoothstep(0.0, 1.0, k) * 3.2
+			h -= smoothstep(0.0, 1.0, k) * 3.2 * keep_dry
 	for r in _rocks:
 		var d := Vector2(x - r.x, z - r.y).length()
 		if d < r.z * 1.8:
-			h += (1.0 - d / (r.z * 1.8)) * 1.4
+			h += (1.0 - d / (r.z * 1.8)) * 1.4 * keep_dry
 	return h
 
 
@@ -155,7 +241,7 @@ func _classify() -> void:
 				t = WATER
 			elif p.y > 3.2 or hi - lo > 1.6:
 				t = MOUNTAIN
-			elif _in_blob(p, _rocks) > 0.0:
+			elif _in_blob(p, _rocks) > 0.0 and road[int(p.z + HALF) * N + int(p.x + HALF)] < 0.3:
 				t = ROCK
 			elif _in_blob(p, _forests) + detail.get_noise_2d(p.x * 2.0, p.z * 2.0) * 0.35 > 0.15:
 				t = FOREST
@@ -289,6 +375,10 @@ func _build_ground_mesh() -> void:
 		terrain_material.set_shader_parameter(layer + "_tex", load("res://assets/textures/ground/%s_albedo.png" % layer))
 		if layer != "sand":
 			terrain_material.set_shader_parameter(layer + "_nrm", load("res://assets/textures/ground/%s_normal.png" % layer))
+	var lk := look()
+	terrain_material.set_shader_parameter("grass_tint", lk.grass)
+	terrain_material.set_shader_parameter("snow_cover", lk.snow)
+	terrain_material.set_shader_parameter("sand_cover", lk.sand)
 	mi.material_override = terrain_material
 	add_child(mi)
 
@@ -304,6 +394,7 @@ func _build_water() -> void:
 	mi.position.y = Defs.WATER_LEVEL
 	var m := ShaderMaterial.new()
 	m.shader = load("res://assets/shaders/water.gdshader")
+	m.set_shader_parameter("ice", look().ice)
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
@@ -317,7 +408,7 @@ func _build_far_ground() -> void:
 	mi.mesh = pm
 	mi.position.y = -2.5
 	var m := StandardMaterial3D.new()
-	m.albedo_color = Color("#7c7466")
+	m.albedo_color = look().far
 	m.roughness = 1.0
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -364,6 +455,8 @@ func _nature_mesh(file: String) -> Mesh:
 			var fm := ShaderMaterial.new()
 			fm.shader = load("res://assets/shaders/foliage.gdshader")
 			fm.set_shader_parameter("leaf_tex", tex)
+			fm.set_shader_parameter("leaf_tint", look().leaf)
+			fm.set_shader_parameter("snow_amt", look().leaf_snow)
 			mesh.surface_set_material(i, fm)
 		else:
 			var m := StandardMaterial3D.new()
@@ -429,7 +522,8 @@ func _scatter_trees() -> void:
 			var p := base + Vector3(rng.randf_range(-0.7, 0.7), 0, rng.randf_range(-0.7, 0.7))
 			p.y = height_at(p.x, p.z) - 0.1
 			tree_cells[j * G + i] = true
-			var k := 2 if rng.randf() < (0.45 if lone else 0.28) else rng.randi() % 2
+			var cy: float = look().cypress
+			var k := 2 if rng.randf() < (maxf(cy, 0.45) if lone else cy) else rng.randi() % 2
 			var s := rng.randf_range(0.75, 1.15) * (0.85 if k < 2 else 1.0)
 			var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s))
 			xf[k].append(Transform3D(b, p))

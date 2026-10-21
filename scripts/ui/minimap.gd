@@ -13,15 +13,23 @@ func _ready() -> void:
 func _make_bg() -> void:
 	var n := Defs.GRID
 	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
+	# ground, forest, rock, water, mountain colours for each land
+	var pal: Array = {
+		"meadow": ["#7d9a46", "#46692c", "#9a9286", "#3d7fa3", "#7d7466"],
+		"steppe": ["#b5a052", "#6a7a33", "#a39579", "#4a88a8", "#8a7a60"],
+		"forest": ["#5f8a3c", "#2f5422", "#8f8a7c", "#3d7fa3", "#6a6658"],
+		"snow": ["#dfe6ee", "#5f7a6e", "#a7adb5", "#a9c8dc", "#c4cad2"],
+		"desert": ["#d8bd84", "#7d8f45", "#b0946a", "#3f8fb0", "#a8875c"],
+	}.get(world.terrain.biome, ["#7d9a46", "#46692c", "#9a9286", "#3d7fa3", "#7d7466"])
 	for j in n:
 		for i in n:
 			var t: int = world.terrain.type_at(Vector2i(i, j))
-			var c := Color("#7d9a46")
+			var c := Color(pal[0])
 			match t:
-				Terrain.FOREST: c = Color("#46692c")
-				Terrain.ROCK: c = Color("#9a9286")
-				Terrain.WATER: c = Color("#3d7fa3")
-				Terrain.MOUNTAIN: c = Color("#7d7466")
+				Terrain.FOREST: c = Color(pal[1])
+				Terrain.ROCK: c = Color(pal[2])
+				Terrain.WATER: c = Color(pal[3])
+				Terrain.MOUNTAIN: c = Color(pal[4])
 			img.set_pixel(i, j, c)
 	_bg = ImageTexture.create_from_image(img)
 

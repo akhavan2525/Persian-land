@@ -5,6 +5,8 @@ render_mode cull_disabled, depth_draw_opaque;
 uniform sampler2D leaf_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut = 0.45;
 uniform float wind = 0.06;
+uniform vec3 leaf_tint = vec3(1.0);   // autumn gold, dry steppe, dark forest...
+uniform float snow_amt = 0.0;         // winter: snow on the upper leaves
 
 varying float tint_dark;
 
@@ -22,7 +24,9 @@ void fragment() {
 	if (t.a < alpha_cut) {
 		discard;
 	}
-	vec3 c = t.rgb * COLOR.rgb * (0.85 + 0.35 * tint_dark);
+	vec3 c = t.rgb * COLOR.rgb * leaf_tint * (0.85 + 0.35 * tint_dark);
+	float top = clamp(NORMAL.y * 0.5 + 0.5, 0.0, 1.0);
+	c = mix(c, vec3(0.9, 0.93, 0.98), snow_amt * (0.35 + 0.65 * tint_dark) * (0.6 + 0.4 * top));
 	ALBEDO = c;
 	ROUGHNESS = 0.8;
 	SPECULAR = 0.15;

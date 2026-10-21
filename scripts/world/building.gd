@@ -167,7 +167,7 @@ func tick(dt: float) -> void:
 		prod_t += dt * rate
 		if prod_t >= bd.every:
 			prod_t -= bd.every
-			world.add_resource(side, bd.res, int(round(bd.amt * Defs.LEVEL_PROD[clampi(level - 1, 0, 2)])), self)
+			world.add_resource(side, bd.res, int(round(bd.amt * Defs.LEVEL_PROD[clampi(level - 1, 0, 2)] * world.land_yield(bd.res))), self)
 	if type == "barracks" and queue.size() > 0:
 		train_t += dt
 		if train_t >= train_time(queue[0]):

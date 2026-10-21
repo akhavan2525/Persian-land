@@ -11,6 +11,8 @@ const IRAN := Defs.IRAN
 const TURAN := Defs.TURAN
 const DIVS := Defs.DIVS
 
+var stage: Dictionary = {}      # the campaign stage being played (Defs.STAGES entry)
+var biome := "meadow"
 var _keep_warned := -100.0    # time of the last spoken warning that the keep is under attack
 var terrain: Terrain
 var rig: CameraRig
@@ -64,14 +66,17 @@ var floats: Array = []          # {pos: Vector3, text, color, t}
 
 func _ready() -> void:
 	randomize()
+	stage = App.stage_def()
+	biome = stage.biome
 	_setup_environment()
 	terrain = Terrain.new()
 	terrain.name = "Terrain"
 	add_child(terrain)
 	var map_seed := randi()
-	if OS.get_cmdline_user_args().has("--pathtest") or OS.get_cmdline_user_args().has("--wavetest"):
+	if OS.get_cmdline_user_args().has("--pathtest") or OS.get_cmdline_user_args().has("--wavetest") or OS.get_cmdline_user_args().has("--chaintest"):
 		map_seed = 4242     # same map every test run
-	terrain.build(map_seed)
+	# the first stage keeps its hand-made map; the others get a layout of their own
+	terrain.build(map_seed, biome, 0 if App.stage == 0 else int(stage.seed))
 	_setup_grids()
 	rig = CameraRig.new()
 	rig.name = "CameraRig"
@@ -83,6 +88,8 @@ func _ready() -> void:
 	powers.setup(self)
 	res[IRAN] = Defs.START_RES.duplicate()
 	res[TURAN] = Defs.START_RES.duplicate()
+	for k in stage.bonus:
+		res[IRAN][k] += stage.bonus[k]
 	_setup_castles()
 	_update_zones()
 	ai = preload("res://scripts/game/enemy_ai.gd").new()
@@ -95,24 +102,38 @@ func _ready() -> void:
 	add_child(hud)
 	rig.position = keeps[IRAN].position + Vector3(10, 0, -8)
 	rig.zoom_by(1.0)
-	say("افراسیاب از جیحون گذشته است. دژ را استوار کن و سپاه گرد آور!", TURAN)
+	if biome == "snow":
+		_add_snowfall()
+	say("مرحله‌ی %s: %s" % [Defs.fa(App.stage + 1), stage.n], IRAN)
+	say("افراسیاب از جیحون گذشته است. دژ را استوار کن و سپاه گرد آور!" if App.stage == 0 else "دژ را استوار کن و سپاه گرد آور. افراسیاب آماده‌ی یورش است!", TURAN)
+
+
+## Sky, fog and sunlight for each biome.
+const SKIES := {
+	"meadow": {"top": "#4f7fc4", "horizon": "#e7cfa8", "ground": "#d9c09a", "fog": "#d8c7a8", "fog_d": 0.0016, "sun": "#ffe2b8", "sun_e": 1.55, "amb": 0.6, "sat": 1.08},
+	"steppe": {"top": "#5a86c0", "horizon": "#efd5a0", "ground": "#e0c590", "fog": "#e6cf9e", "fog_d": 0.0019, "sun": "#ffd9a0", "sun_e": 1.6, "amb": 0.6, "sat": 1.12},
+	"forest": {"top": "#56789e", "horizon": "#c9d3bc", "ground": "#a6b096", "fog": "#b9c6ad", "fog_d": 0.0032, "sun": "#ffe9c8", "sun_e": 1.35, "amb": 0.65, "sat": 1.05},
+	"snow": {"top": "#6f8fbd", "horizon": "#dce3ec", "ground": "#d5dce6", "fog": "#d3dbe6", "fog_d": 0.0026, "sun": "#e8eeff", "sun_e": 1.1, "amb": 0.62, "sat": 0.98},
+	"desert": {"top": "#4a82cc", "horizon": "#f3d9a8", "ground": "#e9cc94", "fog": "#ead3a3", "fog_d": 0.0022, "sun": "#fff0cc", "sun_e": 1.75, "amb": 0.6, "sat": 1.1},
+}
 
 
 func _setup_environment() -> void:
+	var sk: Dictionary = SKIES.get(biome, SKIES.meadow)
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var psm := ProceduralSkyMaterial.new()
-	psm.sky_top_color = Color("#4f7fc4")
-	psm.sky_horizon_color = Color("#e7cfa8")
+	psm.sky_top_color = Color(sk.top)
+	psm.sky_horizon_color = Color(sk.horizon)
 	psm.ground_bottom_color = Color("#5a4e3e")
-	psm.ground_horizon_color = Color("#d9c09a")
+	psm.ground_horizon_color = Color(sk.ground)
 	psm.sun_angle_max = 20.0
 	psm.sky_energy_multiplier = 1.0
 	sky.sky_material = psm
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.6
+	env.ambient_light_energy = sk.amb
 	env.ambient_light_sky_contribution = 0.85
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 0.95
@@ -121,19 +142,19 @@ func _setup_environment() -> void:
 	env.glow_intensity = 0.35
 	env.glow_bloom = 0.05
 	env.fog_enabled = true
-	env.fog_light_color = Color("#d8c7a8")
-	env.fog_density = 0.0016
+	env.fog_light_color = Color(sk.fog)
+	env.fog_density = sk.fog_d
 	env.fog_sky_affect = 0.3
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.08
+	env.adjustment_saturation = sk.sat
 	env.adjustment_contrast = 1.1
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	sun = DirectionalLight3D.new()
 	sun.rotation = Vector3(deg_to_rad(-48), deg_to_rad(-62), 0)
-	sun.light_color = Color("#ffe2b8")
-	sun.light_energy = 1.55
+	sun.light_color = Color(sk.sun)
+	sun.light_energy = sk.sun_e
 	sun.shadow_enabled = true
 	sun.shadow_bias = 0.04
 	sun.shadow_normal_bias = 1.2
@@ -141,6 +162,30 @@ func _setup_environment() -> void:
 	sun.directional_shadow_max_distance = 110.0
 	sun.shadow_blur = 1.2
 	add_child(sun)
+
+
+## Falling snow that follows the camera.
+func _add_snowfall() -> void:
+	var p := CPUParticles3D.new()
+	p.name = "Snowfall"
+	p.amount = 700
+	p.lifetime = 7.0
+	p.preprocess = 7.0
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(45, 1, 35)
+	p.direction = Vector3(0.25, -1, 0.1)
+	p.spread = 12.0
+	p.gravity = Vector3(0.3, -0.6, 0.1)
+	p.initial_velocity_min = 2.0
+	p.initial_velocity_max = 3.2
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.2
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.mesh = Models.soft_particle(0.22, Color(1, 1, 1, 0.9), false)
+	p.color = Color(1, 1, 1, 0.9)
+	p.position = Vector3(0, 22, 0)
+	p.local_coords = false
+	rig.add_child(p)
 
 
 # ---------------- pathfinding ----------------
@@ -258,7 +303,8 @@ func structure_at(c: Vector2i):
 # ---------------- setup ----------------
 func _setup_castles() -> void:
 	keeps[IRAN] = _add_building("keep", IRAN, Defs.KEEP_CELL[IRAN] - Vector2i(2, 2))
-	keeps[TURAN] = _add_building("keep", TURAN, Defs.KEEP_CELL[TURAN] - Vector2i(2, 2))
+	var tl: Dictionary = stage.turan
+	keeps[TURAN] = _add_building("keep", TURAN, Defs.KEEP_CELL[TURAN] - Vector2i(2, 2), true, int(tl.keep))
 	# Turan starts with a walled castle
 	var kc: Vector2i = Defs.KEEP_CELL[TURAN]
 	var lo := kc + Vector2i(-7, -7)
@@ -274,11 +320,11 @@ func _setup_castles() -> void:
 		if s != null:
 			_remove_structure(s, true)
 		if _footprint_free(c, 1):
-			_add_building("tower", TURAN, c)
+			_add_building("tower", TURAN, c, true, int(tl.tower))
 	for p in [[kc + Vector2i(2, 2), "barracks"], [kc + Vector2i(-5, -5), "house"], [kc + Vector2i(-5, -2), "house"],
 			[kc + Vector2i(1, -5), "house"], [kc + Vector2i(-5, 2), "barracks"]]:
 		if _footprint_free(p[0], Defs.BUILDINGS[p[1]].size):
-			_add_building(p[1], TURAN, p[0])
+			_add_building(p[1], TURAN, p[0], true, int(tl.barracks) if p[1] == "barracks" else 1)
 	for p in [kc + Vector2i(-12, -3), kc + Vector2i(-3, 9), kc + Vector2i(-12, 2)]:
 		if _footprint_free(p, 3):
 			_add_building("farm", TURAN, p)
@@ -299,11 +345,16 @@ func _setup_castles() -> void:
 		spawn_unit("spear", TURAN, tp + Vector3(-2 - k * 1.4, 0, 6))
 	for k in 2:
 		spawn_unit("archer", TURAN, tp + Vector3(-3 - k * 1.4, 0, 8))
-	# divs hold the middle village and one on each side
-	for v: Building in villages:
-		var n := 2 if v == villages[1] else 1
+	# later stages: Afrasiab starts with a larger garrison
+	for k in int(tl.extra):
+		spawn_unit(["spear", "archer", "cav", "immortal"][k % 4], TURAN, tp + Vector3(-2 - (k % 4) * 1.5, 0, 10 + (k / 4) * 1.5))
+	# divs hold the villages
+	for vi in villages.size():
+		var v: Building = villages[vi]
+		var n: int = stage.divs[vi]
 		for k in n:
-			spawn_unit("div", DIVS, v.position + Vector3(2.5 - k * 5.0, 0, 3.0))
+			var a := TAU * k / maxf(1.0, n)
+			spawn_unit("div", DIVS, v.position + Vector3(cos(a) * 3.0, 0, 3.0 + sin(a) * 1.5))
 
 
 func _try_prebuilt(c: Vector2i, gate: bool) -> void:
@@ -384,13 +435,20 @@ func are_enemies(a: int, b: int) -> bool:
 func nearest_enemy(src: Node3D, radius: float, include_buildings: bool, center = null) -> Node3D:
 	var c: Vector3 = src.position if center == null else center
 	var best: Node3D = null
-	var bd := radius
+	var bd := INF
+	# a cunning Turan picks soft targets: archers and the wounded first
+	var cunning: bool = src.side == TURAN and ai != null and int(ai.smart) >= 1
 	for u: Unit in units:
 		if u.dead or not are_enemies(src.side, u.side):
 			continue
 		var d := Vector2(u.position.x - c.x, u.position.z - c.z).length()
-		if d < bd:
-			bd = d
+		if d >= radius:
+			continue
+		var score := d
+		if cunning:
+			score -= (3.0 if u.type == "archer" else 0.0) + (1.0 - u.hp / u.max_hp) * 4.0
+		if score < bd:
+			bd = score
 			best = u
 	if best != null or not include_buildings:
 		return best
@@ -591,6 +649,14 @@ func _finish(win: bool) -> void:
 
 
 # ---------------- economy ----------------
+## The land changes what work brings in: thin harvests in the snow, little timber in the desert.
+const LAND_YIELD := {"snow": {"food": 0.7}, "desert": {"wood": 0.75, "stone": 1.2}, "forest": {"wood": 1.25}, "steppe": {"food": 1.15}}
+
+
+func land_yield(res_name: String) -> float:
+	return float(LAND_YIELD.get(biome, {}).get(res_name, 1.0))
+
+
 func pop_cap(side: int) -> int:
 	var k = keeps[side]
 	var cap: int = Defs.KEEP_LEVELS[k.level - 1].pop_cap if k and is_instance_valid(k) else 0
@@ -1292,15 +1358,60 @@ func _move_selected(ground: Vector3) -> void:
 	var i := 0
 	var sorted := selected.duplicate()
 	sorted.sort_custom(func(a, b): return a.position.distance_to(ground) < b.position.distance_to(ground))
+	# only hand out spots that join up with the goal: a spot behind a tree line or across
+	# water would leave that soldier stranded at the edge while the rest march on
+	var region := _reachable_cells(IRAN, Terrain.cell_of(ground), 9)
+	var used := {}
 	for s in sorted:
 		var row := i / cols
 		var col := i % cols
 		var off := Vector3((col - (cols - 1) * 0.5) * spacing, 0, (row - (ceili(float(n) / cols) - 1) * 0.5) * spacing)
 		off = off.rotated(Vector3.UP, rig.rotation.y)
-		s.order_move(ground + off)
+		var spot := ground + off
+		var c := Terrain.cell_of(spot)
+		if not region.is_empty() and (not region.has(c) or used.get(c, 0) >= 2):
+			var best := c
+			var bd := INF
+			for rc: Vector2i in region:
+				if used.get(rc, 0) >= 2:
+					continue
+				var d := Vector2(rc - c).length_squared()
+				if d < bd:
+					bd = d
+					best = rc
+			if bd < INF:
+				var cc := Terrain.cell_center_flat(best)
+				spot = Vector3(cc.x + randf_range(-0.4, 0.4), 0, cc.z + randf_range(-0.4, 0.4))
+				c = best
+		used[c] = used.get(c, 0) + 1
+		s.order_move(spot)
 		i += 1
 	_chatter("move")
 	_ping(ground, Color("#ffe18a"))
+
+
+## Open cells joined to `start` (or the nearest open cell to it), up to `max_r` cells away.
+func _reachable_cells(side: int, start: Vector2i, max_r: int) -> Dictionary:
+	var g: AStarGrid2D = grids[side]
+	var s0 := _nearest_open(side, start)
+	var out := {}
+	if g.is_point_solid(s0):
+		return out
+	out[s0] = true
+	var queue: Array[Vector2i] = [s0]
+	var head := 0
+	while head < queue.size():
+		var c: Vector2i = queue[head]
+		head += 1
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var nc: Vector2i = c + d
+			if out.has(nc) or not Terrain.in_grid(nc) or g.is_point_solid(nc):
+				continue
+			if absi(nc.x - s0.x) > max_r or absi(nc.y - s0.y) > max_r:
+				continue
+			out[nc] = true
+			queue.append(nc)
+	return out
 
 
 ## A spoken answer to an order: Rostam answers for himself, otherwise a soldier does.

@@ -44,6 +44,44 @@ func _ready() -> void:
 	ground.material_override = Models.mat(Color("#7d8a4a"))
 	add_child(ground)
 
+	if what.begins_with("icon:"):
+		# icon:<type> renders one Iranian building on a clear background for a UI icon
+		get_viewport().transparent_bg = true
+		env.background_mode = Environment.BG_CLEAR_COLOR
+		ground.visible = false
+		var bt := what.substr(5)
+		var b := Models.make_building(bt, 0, 1)
+		add_child(b)
+		if bt in ["wall", "gate"]:
+			# a short stretch looks better than a single block
+			for k in [-1, 1]:
+				var w2 := Models.make_building("wall", 0, 1)
+				w2.position = Vector3(k * Defs.CELL, 0, 0)
+				add_child(w2)
+		var icam := Camera3D.new()
+		icam.fov = 30
+		add_child(icam)
+		await get_tree().process_frame
+		# frame the whole model: fit its bounding sphere in the view
+		var box := AABB()
+		var first := true
+		for mi in find_children("*", "MeshInstance3D", true, false):
+			if mi == ground or not mi.is_visible_in_tree():
+				continue
+			var gb: AABB = mi.global_transform * mi.get_aabb()
+			box = gb if first else box.merge(gb)
+			first = false
+		var c := box.get_center()
+		var rad := box.size.length() * 0.5
+		var dir := Vector3(0.55, 0.62, 0.9).normalized()
+		icam.position = c + dir * (rad / sin(deg_to_rad(icam.fov * 0.5)) * 1.02)
+		icam.look_at(c)
+		await get_tree().create_timer(1.0).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(out)
+		print("saved ", out)
+		get_tree().quit()
+		return
 	var x := 0.0
 	if what in ["all", "buildings"]:
 		for t in ["keep", "barracks", "tower", "house", "farm", "woodcutter", "quarry", "wall", "gate", "village"]:

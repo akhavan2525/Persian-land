@@ -25,6 +25,8 @@ var help_frame: PanelContainer
 var end_frame: PanelContainer
 var end_title: Label
 var end_text: Label
+var end_next: Button
+var end_retry: Button
 var _refresh_t := 0.0
 var blockers: Array[Control] = []
 var power_row: HBoxContainer
@@ -139,6 +141,7 @@ func _clear(n: Node) -> void:
 ## (printed by tools/ui/make_ui.py).
 const TOP_SLOTS := [[0.0744, 0.2188], [0.2681, 0.4118], [0.5885, 0.7323], [0.7815, 0.9253]]
 const TOP_SLOT_Y := [0.3365, 0.7279]
+const BAR_H := 148            # height of the painted bottom bar
 const TOP_H := 88.0
 const TOP_W := TOP_H * 1010.0 / 150.0
 
@@ -228,32 +231,50 @@ func _toggle_speed() -> void:
 func _build_bottom_bar() -> void:
 	var holder := CenterContainer.new()
 	holder.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	holder.offset_top = -100
+	holder.offset_top = -BAR_H
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(holder)
 	var bar := PanelContainer.new()
-	bar.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.9), App.GOLD_SOFT, 14, 2, 8))
+	# the painted lapis strip with pointed gold ends
+	bar.add_theme_stylebox_override("panel", App.tex_box("res://assets/ui/bottom_bar.png", Vector4(84, 30, 84, 30), Vector4(64, 12, 64, 12)))
 	holder.add_child(bar)
 	blockers.append(bar)
 	build_bar = HBoxContainer.new()
-	build_bar.add_theme_constant_override("separation", 6)
+	build_bar.add_theme_constant_override("separation", 4)
 	bar.add_child(build_bar)
+	var tile := App.tex_box("res://assets/ui/build_tile.png", Vector4(10, 44, 10, 10), Vector4(6, 8, 6, 6))
+	var tile_on := App.tex_box("res://assets/ui/build_tile.png", Vector4(10, 44, 10, 10), Vector4(6, 8, 6, 6), Color(1.35, 1.25, 0.9))
+	var tile_dn := App.tex_box("res://assets/ui/build_tile.png", Vector4(10, 44, 10, 10), Vector4(6, 8, 6, 6), Color(0.85, 0.85, 0.9))
 	for t in Defs.BUILD_MENU:
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(112, 80)
+		b.custom_minimum_size = Vector2(92, 116)
 		b.toggle_mode = true
+		b.add_theme_stylebox_override("normal", tile)
+		b.add_theme_stylebox_override("hover", tile)
+		b.add_theme_stylebox_override("pressed", tile_on)
+		b.add_theme_stylebox_override("hover_pressed", tile_on)
+		b.add_theme_stylebox_override("disabled", tile_dn)
+		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		var vb := VBoxContainer.new()
 		vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+		vb.offset_top = 4
+		vb.offset_bottom = -6
 		vb.alignment = BoxContainer.ALIGNMENT_CENTER
 		vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_theme_constant_override("separation", 0)
-		var n := _label(Defs.BUILDINGS[t].n, 17, App.IVORY, App.font_bold)
+		vb.add_theme_constant_override("separation", -2)
+		var ip := "res://assets/ui/icons/b_%s.png" % t
+		if ResourceLoader.exists(ip):
+			var ic := _icon(ip, 58)
+			ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			vb.add_child(ic)
+		var n := _label(Defs.BUILDINGS[t].n, 14, App.IVORY, App.font_bold)
 		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		n.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+		n.add_theme_constant_override("outline_size", 4)
 		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var c := _label(Defs.cost_text(Defs.BUILDINGS[t].cost), 13, App.MUTED)
+		var c := _label(Defs.cost_text(Defs.BUILDINGS[t].cost), 11, Color("#e6d7a8"))
 		c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		c.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vb.add_child(n)
 		vb.add_child(c)
@@ -271,8 +292,8 @@ func _build_bottom_bar() -> void:
 func _build_power_row() -> void:
 	power_row = HBoxContainer.new()
 	power_row.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	power_row.offset_top = -196
-	power_row.offset_bottom = -104
+	power_row.offset_top = -BAR_H - 98
+	power_row.offset_bottom = -BAR_H - 6
 	power_row.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	power_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	power_row.add_theme_constant_override("separation", 0)
@@ -353,18 +374,18 @@ func _refresh_powers() -> void:
 func _build_side_tools() -> void:
 	var vb := VBoxContainer.new()
 	vb.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	vb.offset_left = 10
-	vb.offset_top = -40
+	vb.offset_left = 6
+	vb.offset_top = -20
 	vb.add_theme_constant_override("separation", 8)
 	vb.layout_direction = Control.LAYOUT_DIRECTION_RTL
 	root.add_child(vb)
 	blockers.append(vb)
 	for item in [["همه‌ی سپاه", world.select_all_army], ["رستم", world.select_hero], ["دژ ایران", world.focus_home], ["ایست", world.stop_selected]]:
-		var b := _button(item[0], "Ghost", item[1])
-		b.custom_minimum_size = Vector2(118, 46)
+		var b := _button(item[0], "Plaque", item[1])
+		b.custom_minimum_size = Vector2(140, 44)
 		vb.add_child(b)
-	box_btn = _button("کادر انتخاب", "Ghost", world.toggle_box_mode)
-	box_btn.custom_minimum_size = Vector2(118, 46)
+	box_btn = _button("کادر انتخاب", "Plaque", world.toggle_box_mode)
+	box_btn.custom_minimum_size = Vector2(140, 44)
 	box_btn.toggle_mode = true
 	vb.add_child(box_btn)
 
@@ -510,7 +531,7 @@ func _fill_building(b: Building) -> void:
 		_:
 			var bd: Dictionary = Defs.BUILDINGS[b.type]
 			if bd.has("res"):
-				var amt := int(round(bd.amt * Defs.LEVEL_PROD[clampi(b.level - 1, 0, 2)]))
+				var amt := int(round(bd.amt * Defs.LEVEL_PROD[clampi(b.level - 1, 0, 2)] * world.land_yield(bd.res)))
 				sel_box.add_child(_label("هر %s ثانیه %s %s" % [Defs.fa(int(bd.every)), Defs.fa(amt), Defs.RES_NAMES[bd.res]], 15, App.TURQ))
 	if b.type not in ["keep", "village"]:
 		sel_box.add_child(_button("تخریب (نیمی از هزینه برمی‌گردد)", "", world.demolish_selected))
@@ -543,7 +564,7 @@ func _build_build_panel() -> void:
 	build_panel = PanelContainer.new()
 	build_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	build_panel.offset_top = -176
-	build_panel.offset_bottom = -110
+	build_panel.offset_bottom = -BAR_H - 10
 	build_panel.offset_left = -300
 	build_panel.offset_right = 300
 	build_panel.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.92), App.GOLD, 12, 1, 10))
@@ -614,18 +635,34 @@ func _on_message(text: String, side: int) -> void:
 
 # ---------------- minimap ----------------
 func _build_minimap() -> void:
-	var frame := PanelContainer.new()
-	frame.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	frame.offset_left = 10
-	frame.offset_top = 64
-	frame.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.9), App.GOLD_SOFT, 8, 2, 4))
-	root.add_child(frame)
-	blockers.append(frame)
+	# the painted tile frame is drawn over the map; its square hole shows the map
+	const MAP := 128.0
+	var fsize := Vector2(MAP * 512.0 / 309.0, MAP * 500.0 / 278.0)
+	var holder := Control.new()
+	holder.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	holder.offset_left = 0
+	holder.offset_top = 50
+	holder.custom_minimum_size = fsize
+	holder.size = fsize
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(holder)
 	minimap = preload("res://scripts/ui/minimap.gd").new()
 	minimap.world = world
-	minimap.custom_minimum_size = Vector2(150, 150)
+	minimap.position = Vector2(102.0 / 512.0 * fsize.x, 112.0 / 500.0 * fsize.y)
+	minimap.size = Vector2(MAP, MAP)
+	minimap.custom_minimum_size = Vector2(MAP, MAP)
 	minimap.layout_direction = Control.LAYOUT_DIRECTION_LTR
-	frame.add_child(minimap)
+	holder.add_child(minimap)
+	blockers.append(minimap)
+	var fr := TextureRect.new()
+	fr.texture = load("res://assets/ui/minimap_frame.png")
+	fr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fr.stretch_mode = TextureRect.STRETCH_SCALE
+	fr.position = Vector2.ZERO
+	fr.size = fsize
+	fr.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	fr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(fr)
 
 
 # ---------------- dialogs ----------------
@@ -699,7 +736,10 @@ func _build_dialogs() -> void:
 	end_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	end_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ev.add_child(end_text)
-	ev.add_child(_button("نبردی دیگر", "Primary", _restart))
+	end_next = _button("مرحله‌ی بعد", "Primary", _next_stage)
+	ev.add_child(end_next)
+	end_retry = _button("دوباره این مرحله", "Primary", _restart)
+	ev.add_child(end_retry)
 	ev.add_child(_button("منوی اصلی", "", _to_menu))
 
 
@@ -737,13 +777,27 @@ func _to_menu() -> void:
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 
+func _next_stage() -> void:
+	App.stage = mini(App.stage + 1, Defs.STAGES.size() - 1)
+	App.save_progress()
+	_restart()
+
+
 func _on_game_over(win: bool) -> void:
 	dim.visible = true
 	end_frame.visible = true
 	var mins := Defs.fa_time(world.time)
+	var last := App.stage >= Defs.STAGES.size() - 1
+	end_next.visible = win and not last
+	end_retry.visible = not win
 	if win:
+		App.stage_won(world.time)
 		end_title.text = "پیروزی ایران"
-		end_text.text = "دژ افراسیاب پس از %s فروریخت و درفش کاویانی بر باروی توران برافراشته شد." % mins
+		end_text.text = "مرحله‌ی «%s» پس از %s گشوده شد و درفش کاویانی بر باروی توران برافراشته شد." % [world.stage.n, mins]
+		if last:
+			end_text.text += "\nافراسیاب شکست خورد و ایران برای همیشه آسوده شد. تو همه‌ی مرحله‌ها را گشودی!"
+		else:
+			end_text.text += "\nمرحله‌ی تازه گشوده شد: %s" % Defs.STAGES[App.stage + 1].n
 	else:
 		end_title.text = "شکست"
 		end_text.text = "سپاه توران پس از %s دژ ایران را گشود. دوباره بکوش." % mins

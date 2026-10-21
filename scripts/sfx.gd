@@ -12,6 +12,8 @@ var _streams := {}                # base name -> [AudioStream]
 var _players: Array[AudioStreamPlayer] = []
 var _last := {}                   # base name -> time last played
 var _voice: AudioStreamPlayer
+var _music: AudioStreamPlayer
+var _music_tw: Tween
 var _voices := {}                 # voice line name -> [AudioStream] (select_0, select_1... become "select")
 
 
@@ -24,6 +26,9 @@ func _ready() -> void:
 	_voice = AudioStreamPlayer.new()
 	_voice.volume_db = 2.0
 	add_child(_voice)
+	_music = AudioStreamPlayer.new()
+	_music.volume_db = -80.0
+	add_child(_music)
 	_load_dir(DIR, ".wav", _streams)
 	_load_dir(VOICE_DIR, ".ogg", _voices)
 
@@ -90,6 +95,36 @@ func voice(name: String, urgent := false) -> void:
 		pick = list[(list.find(pick) + 1) % list.size()]   # do not repeat the same line twice in a row
 	_voice.stream = pick
 	_voice.play()
+
+
+## Background music: fades in, loops, and fades out when `stop_music` is called.
+func play_music(path: String, volume_db := -4.0) -> void:
+	if not App.music_on or not ResourceLoader.exists(path):
+		return
+	var st: AudioStream = load(path)
+	if _music.playing and _music.stream == st:
+		_fade_music(volume_db, 0.8)
+		return
+	if st is AudioStreamOggVorbis:
+		(st as AudioStreamOggVorbis).loop = true
+	_music.stream = st
+	_music.volume_db = -40.0
+	_music.play()
+	_fade_music(volume_db, 1.5)
+
+
+func stop_music(fade := 1.2) -> void:
+	if _music.playing:
+		_fade_music(-60.0, fade, true)
+
+
+func _fade_music(to_db: float, secs: float, stop_after := false) -> void:
+	if _music_tw:
+		_music_tw.kill()
+	_music_tw = create_tween()
+	_music_tw.tween_property(_music, "volume_db", to_db, secs)
+	if stop_after:
+		_music_tw.tween_callback(_music.stop)
 
 
 func _free_player() -> AudioStreamPlayer:

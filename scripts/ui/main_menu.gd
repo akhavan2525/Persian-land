@@ -2,6 +2,8 @@ extends Control
 ## Title screen: background painting, the story, difficulty and the start button.
 
 var diff_buttons := {}
+var stage_buttons: Array = []
+var story: Label
 
 
 func _ready() -> void:
@@ -30,21 +32,21 @@ func _ready() -> void:
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Frame"
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -300
-	panel.offset_right = 300
+	panel.offset_left = -340
+	panel.offset_right = 340
 	panel.offset_top = 10
 	panel.offset_bottom = 10
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.custom_minimum_size = Vector2(600, 0)
+	panel.custom_minimum_size = Vector2(680, 0)
 	add_child(panel)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 12)
+	vb.add_theme_constant_override("separation", 7)
 	panel.add_child(vb)
 	var t := Label.new()
 	t.text = "سرزمین پارسیان"
 	t.theme_type_variation = "Title"
-	t.add_theme_font_size_override("font_size", 64)
+	t.add_theme_font_size_override("font_size", 50)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
 	var sub := Label.new()
@@ -53,12 +55,38 @@ func _ready() -> void:
 	sub.add_theme_font_size_override("font_size", 18)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(sub)
-	var story := Label.new()
-	story.text = "افراسیاب، شاه توران، از آن سوی جیحون لشکر کشیده و دژی استوار در شمال برپا کرده است. دیوان مازندران روستاهای میانه را در بند دارند.\nدژ ایران را بساز و ارتقا بده، کشتزار و معدن برپا کن، سپاه گرد آور، روستاها را آزاد کن و دژ افراسیاب را فروریز."
+	story = Label.new()
 	story.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	story.add_theme_font_size_override("font_size", 17)
-	story.add_theme_constant_override("line_spacing", 6)
+	story.add_theme_font_size_override("font_size", 15)
+	story.add_theme_constant_override("line_spacing", 4)
+	story.custom_minimum_size.y = 92
 	vb.add_child(story)
+	# campaign stages: three to a row, locked ones greyed out
+	var sl := Label.new()
+	sl.text = "مرحله‌ها"
+	sl.theme_type_variation = "Muted"
+	vb.add_child(sl)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vb.add_child(grid)
+	for i in Defs.STAGES.size():
+		var st: Dictionary = Defs.STAGES[i]
+		var b := Button.new()
+		var locked := i >= App.unlocked
+		b.text = "%s. %s" % [Defs.fa(i + 1), st.n] if not locked else "%s. قفل" % Defs.fa(i + 1)
+		b.tooltip_text = Defs.BIOMES[st.biome].n
+		b.toggle_mode = true
+		b.disabled = locked
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(160, 46)
+		b.add_theme_font_size_override("font_size", 15)
+		b.clip_text = true
+		b.pressed.connect(_pick_stage.bind(i))
+		grid.add_child(b)
+		stage_buttons.append(b)
 	var dl := Label.new()
 	dl.text = "سختی نبرد"
 	dl.theme_type_variation = "Muted"
@@ -72,7 +100,7 @@ func _ready() -> void:
 		b.text = Defs.DIFFICULTY[k].n
 		b.toggle_mode = true
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(120, 48)
+		b.custom_minimum_size = Vector2(110, 42)
 		b.button_pressed = k == App.difficulty
 		b.pressed.connect(_pick.bind(k))
 		dh.add_child(b)
@@ -80,12 +108,14 @@ func _ready() -> void:
 	var start := Button.new()
 	start.text = "آغاز نبرد"
 	start.theme_type_variation = "Primary"
-	start.custom_minimum_size = Vector2(340, 112)
+	start.custom_minimum_size = Vector2(300, 96)
 	start.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	start.add_theme_font_size_override("font_size", 24)
 	start.focus_mode = Control.FOCUS_NONE
 	start.pressed.connect(_start)
 	vb.add_child(start)
+	_pick_stage(clampi(App.stage, 0, App.unlocked - 1))
+	Sfx.play_music("res://assets/music/menu_theme.ogg")
 	var ver := Label.new()
 	ver.text = "نسخه‌ی آزمایشی %s" % Defs.fa(ProjectSettings.get_setting("application/config/version", "0.1.0"))
 	ver.theme_type_variation = "Muted"
@@ -96,9 +126,20 @@ func _ready() -> void:
 
 func _pick(k: String) -> void:
 	App.difficulty = k
+	App.save_progress()
 	for d in diff_buttons:
 		diff_buttons[d].set_pressed_no_signal(d == k)
 
 
+func _pick_stage(i: int) -> void:
+	App.stage = i
+	for k in stage_buttons.size():
+		stage_buttons[k].set_pressed_no_signal(k == i)
+	var st: Dictionary = Defs.STAGES[i]
+	story.text = "مرحله‌ی %s، %s (%s)\n%s" % [Defs.fa(i + 1), st.n, Defs.BIOMES[st.biome].n, st.story]
+
+
 func _start() -> void:
+	App.save_progress()
+	Sfx.stop_music(1.5)
 	get_tree().change_scene_to_file("res://scenes/game.tscn")

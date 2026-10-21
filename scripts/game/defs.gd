@@ -165,6 +165,51 @@ const DIFFICULTY := {
 }
 
 
+# ---------------- campaign ----------------
+## Each stage scales the chosen difficulty and sets the land, Afrasiab's castle and his cunning.
+##   biome: meadow / steppe / forest / snow / desert
+##   ai: multipliers on the difficulty table (first and every: wave timing, base and grow: wave size)
+##   smart: 0 plain waves, 1 waves gather before attacking and focus weak targets,
+##          2 also send a flanking group and pull back badly wounded soldiers
+##   turan: starting levels of Afrasiab's keep, towers and barracks, and extra soldiers
+##   divs: divs at each of the three villages
+const STAGES := [
+	{"n": "گذر جیحون", "biome": "meadow", "seed": 1101,
+		"story": "افراسیاب، شاه توران، از آن سوی جیحون لشکر کشیده و دژی استوار در شمال برپا کرده است. دیوان مازندران روستاهای میانه را در بند دارند.\nدژ ایران را بساز و ارتقا بده، سپاه گرد آور، روستاها را آزاد کن و دژ افراسیاب را فروریز.",
+		"ai": {"first": 1.0, "every": 1.0, "base": 0, "grow": 1.0, "income": 1.0}, "smart": 0,
+		"turan": {"keep": 1, "tower": 1, "barracks": 1, "extra": 0}, "divs": [1, 2, 1], "bonus": {}},
+	{"n": "دشت خاوران", "biome": "steppe", "seed": 2207,
+		"story": "پس از شکست در جیحون، سپاه توران در دشت‌های زرین خاوران گرد آمده است. این بار تورانیان زودتر می‌تازند و سپاهشان را پیش از حمله یکجا گرد می‌آورند.",
+		"ai": {"first": 0.85, "every": 0.92, "base": 1, "grow": 1.15, "income": 1.12}, "smart": 1,
+		"turan": {"keep": 2, "tower": 1, "barracks": 1, "extra": 2}, "divs": [1, 2, 2], "bonus": {"wood": 20}},
+	{"n": "جنگل‌های مازندران", "biome": "forest", "seed": 3313,
+		"story": "دیو سپید و یارانش جنگل‌های انبوه مازندران را گرفته‌اند و افراسیاب با آنان پیمان بسته است. روستاها پر از دیوند و راه‌ها از میان درختان می‌گذرد.",
+		"ai": {"first": 0.8, "every": 0.88, "base": 1, "grow": 1.25, "income": 1.2}, "smart": 1,
+		"turan": {"keep": 2, "tower": 2, "barracks": 2, "extra": 3}, "divs": [2, 3, 2], "bonus": {"stone": 20}},
+	{"n": "گردنه‌ی برفی البرز", "biome": "snow", "seed": 4421,
+		"story": "زمستان بر البرز فرود آمده است. برف راه‌ها را پوشانده و کشتزارها کم‌بار شده‌اند. افراسیاب در دل کوهستان دژی تازه ساخته و از دو سو یورش می‌آورد.",
+		"ai": {"first": 0.78, "every": 0.85, "base": 2, "grow": 1.35, "income": 1.3}, "smart": 2,
+		"turan": {"keep": 3, "tower": 2, "barracks": 2, "extra": 4}, "divs": [2, 2, 2], "bonus": {"food": 40, "wood": 30}},
+	{"n": "ریگزار توران", "biome": "desert", "seed": 5531,
+		"story": "سپاه ایران به خاک توران رسیده است. در این ریگزار سوزان درخت کم است و چوب کمیاب. تورانیان این‌جا خانه‌ی خود را می‌شناسند و بی‌امان می‌جنگند.",
+		"ai": {"first": 0.72, "every": 0.8, "base": 2, "grow": 1.45, "income": 1.4}, "smart": 2,
+		"turan": {"keep": 3, "tower": 3, "barracks": 3, "extra": 5}, "divs": [2, 3, 2], "bonus": {"wood": 60, "gold": 40}},
+	{"n": "گنگ‌دژ افراسیاب", "biome": "snow", "seed": 6649,
+		"story": "واپسین نبرد! گنگ‌دژ، پایتخت افراسیاب، در سرمای شمال برافراشته است. باروهایش بلند و سپاهش بی‌شمار است. دژ افراسیاب را فروریز تا ایران برای همیشه آسوده شود.",
+		"ai": {"first": 0.68, "every": 0.75, "base": 3, "grow": 1.6, "income": 1.55}, "smart": 2,
+		"turan": {"keep": 5, "tower": 3, "barracks": 4, "extra": 7}, "divs": [3, 3, 3], "bonus": {"wood": 60, "stone": 60, "gold": 60}},
+]
+
+## Land looks: ground tints, snow and sand cover, trees, sky and fog.
+const BIOMES := {
+	"meadow": {"n": "چمنزار"},
+	"steppe": {"n": "دشت"},
+	"forest": {"n": "جنگل"},
+	"snow": {"n": "برفی"},
+	"desert": {"n": "بیابان"},
+}
+
+
 static func fa(n) -> String:
 	const DIGITS := "۰۱۲۳۴۵۶۷۸۹"
 	var s := str(n)
