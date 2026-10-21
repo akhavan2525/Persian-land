@@ -53,6 +53,7 @@ func build(seed_value: int, biome_name := "meadow", layout_seed := 0, extras := 
 		_lakes = _lakes.filter(func(l): return l.z < 8.0 and _river_dist(l.x, l.y) > l.z * 1.6 + 10.0)
 	if int(extras.get("peaks", 0)) > 0:
 		_gen_peaks(int(extras.peaks), layout_seed + 17)
+	_home_resources()
 	rng.seed = seed_value
 	noise.seed = seed_value
 	noise.frequency = 0.018
@@ -67,6 +68,22 @@ func build(seed_value: int, biome_name := "meadow", layout_seed := 0, extras := 
 	_build_far_ground()
 	_scatter_trees()
 	_scatter_rocks()
+
+
+## Every castle gets a rock outcrop and a small wood inside its first territory ring,
+## so a quarry and a woodcutter can always be built at home.
+func _home_resources() -> void:
+	for s in 2:
+		var me := cell_center_flat(Defs.KEEP_CELL[s])
+		var foe := cell_center_flat(Defs.KEEP_CELL[1 - s])
+		var away := Vector2(me.x - foe.x, me.z - foe.z).normalized()
+		var perp := Vector2(-away.y, away.x)
+		var rock := Vector2(me.x, me.z) + away * 6.0 + perp * 16.0
+		var wood := Vector2(me.x, me.z) + away * 6.0 - perp * 14.0
+		_rocks.append(Vector3(rock.x, rock.y, 3.6))
+		_forests.append(Vector3(wood.x, wood.y, 4.5))
+		_lakes = _lakes.filter(func(l): return Vector2(l.x - rock.x, l.y - rock.y).length() > l.z * 1.6 + 5.0 \
+			and Vector2(l.x - wood.x, l.y - wood.y).length() > l.z * 1.6 + 5.0)
 
 
 # ---------------- river and mountains ----------------

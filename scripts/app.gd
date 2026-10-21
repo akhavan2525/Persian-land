@@ -91,6 +91,8 @@ func _ready() -> void:
 			add_child(ss)
 		if a == "--chaintest":
 			add_child(load("res://scripts/dev/chaintest.gd").new())
+		if a == "--homecheck":
+			add_child(load("res://scripts/dev/homecheck.gd").new())
 		if a == "--campcheck":
 			add_child(load("res://scripts/dev/campcheck.gd").new())
 		if a == "--siegetest":

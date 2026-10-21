@@ -121,7 +121,7 @@ const SKIES := {
 	"steppe": {"top": "#5a86c0", "horizon": "#efd5a0", "ground": "#e0c590", "fog": "#e6cf9e", "fog_d": 0.0019, "sun": "#ffd9a0", "sun_e": 1.6, "amb": 0.6, "sat": 1.12},
 	"forest": {"top": "#56789e", "horizon": "#c9d3bc", "ground": "#a6b096", "fog": "#b9c6ad", "fog_d": 0.0032, "sun": "#ffe9c8", "sun_e": 1.35, "amb": 0.65, "sat": 1.05},
 	"snow": {"top": "#6f8fbd", "horizon": "#dce3ec", "ground": "#d5dce6", "fog": "#d3dbe6", "fog_d": 0.0026, "sun": "#e8eeff", "sun_e": 1.1, "amb": 0.62, "sat": 0.98},
-	"storm": {"top": "#3e4858", "horizon": "#8a9098", "ground": "#7f8478", "fog": "#868d95", "fog_d": 0.0042, "sun": "#c6d0de", "sun_e": 0.75, "amb": 0.5, "sat": 0.82},
+	"storm": {"top": "#4d5d74", "horizon": "#a9b0b8", "ground": "#9a9a88", "fog": "#a3abb4", "fog_d": 0.0024, "sun": "#dfe6f0", "sun_e": 1.05, "amb": 0.62, "sat": 1.0},
 	"desert": {"top": "#4a82cc", "horizon": "#f3d9a8", "ground": "#e9cc94", "fog": "#ead3a3", "fog_d": 0.0022, "sun": "#fff0cc", "sun_e": 1.75, "amb": 0.6, "sat": 1.1},
 }
 
