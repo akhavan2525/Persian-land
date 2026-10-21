@@ -617,6 +617,9 @@ func _fill_building(b: Building) -> void:
 				# phones show no tooltips, so a locked soldier says on the button what it is waiting for
 				var locked: bool = ud.has("barracks_level") and b.level < ud.barracks_level
 				var info: String = ("نیاز به سربازخانه‌ی سطح %s" % Defs.fa(ud.barracks_level)) if locked else Defs.cost_text(ud.cost)
+				if not locked and err != "":
+					# say on the button what is missing, e.g. food
+					info = err
 				var btn := _button("%s  ·  %s" % [ud.n, info], "", world.train.bind(t))
 				btn.disabled = err != ""
 				btn.tooltip_text = err if err != "" else ud.desc
@@ -640,8 +643,11 @@ func _fill_building(b: Building) -> void:
 			if bd.has("res"):
 				var amt := int(round(bd.amt * Defs.LEVEL_PROD[clampi(b.level - 1, 0, 2)] * world.land_yield(bd.res)))
 				sel_box.add_child(_label("هر %s ثانیه %s %s" % [Defs.fa(int(bd.every)), Defs.fa(amt), Defs.RES_NAMES[bd.res]], 15, App.TURQ))
-	if b.type not in ["keep", "village"]:
-		sel_box.add_child(_button("تخریب (نیمی از هزینه برمی‌گردد)", "", world.demolish_selected))
+	if b.type == "gate":
+		sel_box.add_child(_button("چرخاندن دروازه ۹۰ درجه", "", world.rotate_selected_gate))
+	if b.type not in ["keep", "village", "camp"]:
+		var dl := "حذف دیوار" if b.type == "wall" else "تخریب"
+		sel_box.add_child(_button("%s (نیمی از هزینه برمی‌گردد)" % dl, "", world.demolish_selected))
 
 
 ## A tribe's camp: who it trusts, its pact, and the gift button.

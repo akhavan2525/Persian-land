@@ -32,6 +32,7 @@ func _run() -> void:
 	await get_tree().create_timer(1.0).timeout
 	await _shot("panel_keep")
 	w.clear_selection()
+	w.res[0].food = 0
 	var bk = w._add_building("barracks", 0, w.keeps[0].cell + Vector2i(6, 6))
 	w.select_building(bk)
 	await get_tree().create_timer(1.0).timeout
@@ -40,4 +41,21 @@ func _run() -> void:
 	w.select_units(army)
 	await get_tree().create_timer(1.0).timeout
 	await _shot("panel_units_again")
+	w.clear_selection()
+	var c0: Vector2i = w.keeps[0].cell + Vector2i(8, -4)
+	for i in 3:
+		if i != 1:
+			w._add_building("wall", 0, c0 + Vector2i(0, i))
+	var g = w._add_building("gate", 0, c0 + Vector2i(0, 1))
+	w._orient_gate(g)
+	print("gate turn: %d" % g.turn)
+	w.rig.position = Vector3(g.position.x, 0, g.position.z)
+	w.rig._apply()
+	w.select_building(g)
+	await get_tree().create_timer(1.0).timeout
+	await _shot("panel_gate")
+	w.clear_selection()
+	w.select_building(w.structure_at(c0))
+	await get_tree().create_timer(0.5).timeout
+	await _shot("panel_wall")
 	get_tree().quit()

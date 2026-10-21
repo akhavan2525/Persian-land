@@ -24,6 +24,7 @@ var capturing := -1
 var selected := false
 var _rise := 1.0
 var last_hit_t := -100.0
+var turn := 0                  # gate: 1 = turned a quarter
 var ally := -1                 # camp: the side its tribe is pledged to
 var title := ""                # camp: the tribe's name
 
@@ -101,9 +102,14 @@ func _rebuild_model() -> void:
 	marks.position.y = 0.05
 	add_child(marks)
 	if type in ["wall", "gate"]:
-		model.rotation.y = 0.0
+		model.rotation.y = PI * 0.5 * turn if type == "gate" else 0.0
 	elif type != "keep":
 		model.rotation.y = [0.0, PI * 0.5, PI, PI * 1.5][(cell.x * 7 + cell.y * 3) % 4] if type in ["house", "woodcutter", "quarry"] else 0.0
+
+
+func set_turn(t: int) -> void:
+	turn = t
+	_rebuild_model()
 
 
 func set_ally(s: int) -> void:

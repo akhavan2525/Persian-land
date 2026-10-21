@@ -702,6 +702,17 @@ func afford(side: int, cost: Dictionary) -> bool:
 	return true
 
 
+## What is short for a cost, e.g. "غذا کم است (۱۰ لازم)", or "" when it is affordable.
+func missing(side: int, cost: Dictionary) -> String:
+	var lack: PackedStringArray = []
+	for k in cost:
+		if res[side][k] < cost[k]:
+			lack.append(Defs.RES_NAMES[k])
+	if lack.is_empty():
+		return ""
+	return "%s کم است" % " و ".join(lack)
+
+
 func pay(side: int, cost: Dictionary) -> void:
 	for k in cost:
 		res[side][k] -= cost[k]
@@ -1055,6 +1066,13 @@ func _wall_line(a: Vector2i, b: Vector2i) -> Array:
 func _build_tap(ground: Vector3) -> void:
 	var size: int = Defs.BUILDINGS[build_type].size
 	var c := Terrain.cell_of(ground + Vector3(-(size - 1) * Defs.CELL * 0.5, 0, -(size - 1) * Defs.CELL * 0.5))
+	# tapping one of your own walls or gates while drawing walls picks it (to remove or turn it)
+	var hit = structure_at(Terrain.cell_of(ground))
+	if build_type in ["wall", "gate"] and hit != null and hit.side == IRAN and hit.type in ["wall", "gate"] \
+			and wall_start.x < 0:
+		cancel_build()
+		select_building(hit)
+		return
 	if build_type == "wall":
 		if wall_start.x < 0 or wall_cells.size() > 0:
 			wall_start = c
@@ -1076,6 +1094,7 @@ func confirm_build() -> void:
 			if placement_error("wall", c) == "":
 				pay(IRAN, Defs.BUILDINGS.wall.cost)
 				_add_building("wall", IRAN, c, false)
+				_orient_gates_near(c)
 				placed += 1
 		if placed == 0:
 			say("این‌جا دیوار نمی‌شود کشید.", TURAN)
@@ -1093,6 +1112,8 @@ func confirm_build() -> void:
 	pay(IRAN, Defs.BUILDINGS[build_type].cost)
 	Sfx.play("build")
 	var b := _add_building(build_type, IRAN, build_cell, false)
+	if b.type == "gate":
+		_orient_gate(b)
 	spawn_dust(b.position, b.size * 0.8)
 	var t := build_type
 	cancel_build()
@@ -1146,8 +1167,9 @@ func can_train(type: String, b: Building = null) -> String:
 		b = selected_building
 	if ud.has("barracks_level") and (b == null or b.level < ud.barracks_level):
 		return "سربازخانه باید سطح %s باشد." % Defs.fa(ud.barracks_level)
-	if not afford(IRAN, ud.cost):
-		return "منابع کافی نیست."
+	var short := missing(IRAN, ud.cost)
+	if short != "":
+		return short
 	if _starving[IRAN]:
 		return "مردم گرسنه‌اند. اول غذا فراهم کن."
 	if pop_used(IRAN) + 1 > pop_cap(IRAN):
@@ -1216,7 +1238,7 @@ func upgrade_selected() -> void:
 
 func demolish_selected() -> void:
 	var b := selected_building
-	if b == null or b.side != IRAN or b.type in ["keep", "village"]:
+	if b == null or b.side != IRAN or b.type in ["keep", "village", "camp"]:
 		return
 	for k in Defs.BUILDINGS[b.type].cost:
 		res[IRAN][k] += int(Defs.BUILDINGS[b.type].cost[k] / 2)
@@ -1225,6 +1247,37 @@ func demolish_selected() -> void:
 	selected_building = null
 	_update_zones()
 	selection_changed.emit()
+
+
+## A gate faces across the wall it sits in: walls east and west of it -> the road runs
+## north-south, walls north and south -> it turns a quarter.
+func _orient_gate(g: Building) -> void:
+	var ew := 0
+	var ns := 0
+	for d in [Vector2i(1, 0), Vector2i(-1, 0)]:
+		var o = structure_at(g.cell + d)
+		if o != null and o.type in ["wall", "gate"]:
+			ew += 1
+	for d in [Vector2i(0, 1), Vector2i(0, -1)]:
+		var o = structure_at(g.cell + d)
+		if o != null and o.type in ["wall", "gate"]:
+			ns += 1
+	if ew != ns:
+		g.set_turn(0 if ew > ns else 1)
+
+
+func _orient_gates_near(c: Vector2i) -> void:
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var o = structure_at(c + d)
+		if o != null and o.type == "gate" and o.side == IRAN:
+			_orient_gate(o)
+
+
+func rotate_selected_gate() -> void:
+	var b := selected_building
+	if b != null and b.type == "gate" and b.side == IRAN:
+		b.set_turn(1 - b.turn)
+		Sfx.play("build")
 
 
 # ---------------- touch input ----------------
