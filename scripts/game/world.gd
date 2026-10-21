@@ -40,7 +40,8 @@ var _starving := [false, false]
 # selection & input
 var selected: Array = []
 var selected_building: Building = null
-var mode := "normal"            # normal / build / box / power
+var mode := "normal"            # normal / build / box / power / formation
+var formation_armed := ""      # formation waiting for a tap on the map
 var powers: Powers
 var build_type := ""
 var build_cell := Vector2i(-1, -1)
@@ -65,6 +66,7 @@ var floats: Array = []          # {pos: Vector3, text, color, t}
 
 
 func _ready() -> void:
+	war_started.connect(_on_war_started)
 	# 60 frames a second is smooth; 90 and 120 Hz phones would otherwise draw twice as much and heat up
 	Engine.max_fps = 60
 	randomize()
@@ -123,6 +125,7 @@ const SKIES := {
 func _setup_environment() -> void:
 	var sk: Dictionary = SKIES.get(biome, SKIES.meadow)
 	var env := Environment.new()
+	_env = env
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var psm := ProceduralSkyMaterial.new()
@@ -133,6 +136,7 @@ func _setup_environment() -> void:
 	psm.sun_angle_max = 20.0
 	psm.sky_energy_multiplier = 1.0
 	sky.sky_material = psm
+	_sky_mat = psm
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = sk.amb
@@ -441,7 +445,7 @@ func nearest_enemy(src: Node3D, radius: float, include_buildings: bool, center =
 	# a cunning Turan picks soft targets: archers and the wounded first
 	var cunning: bool = src.side == TURAN and ai != null and int(ai.smart) >= 1
 	for u: Unit in units:
-		if u.dead or not are_enemies(src.side, u.side):
+		if u.dead or not are_enemies(src.side, u.side) or u.hidden:
 			continue
 		var d := Vector2(u.position.x - c.x, u.position.z - c.z).length()
 		if d >= radius:
@@ -507,6 +511,8 @@ func deal_damage(attacker: Node3D, target: Node3D, base: float) -> void:
 		return
 	var atype: String = attacker.type if attacker is Unit else "tower"
 	var dmg := base * _damage_mult(atype, target) * randf_range(0.9, 1.1)
+	if target is Unit:
+		dmg *= (target as Unit).harm_mult()
 	target.take_damage(dmg, attacker)
 	if target.side == IRAN or attacker.side == IRAN:
 		powers.note_battle()
@@ -656,7 +662,7 @@ const LAND_YIELD := {"snow": {"food": 0.7}, "desert": {"wood": 0.75, "stone": 1.
 
 
 func land_yield(res_name: String) -> float:
-	return float(LAND_YIELD.get(biome, {}).get(res_name, 1.0))
+	return float(LAND_YIELD.get("snow" if winter_k > 0.5 else biome, {}).get(res_name, 1.0))
 
 
 func pop_cap(side: int) -> int:
@@ -815,6 +821,8 @@ func _physics_process(dt: float) -> void:
 	if finished:
 		return
 	time += dt
+	if stage.has("first_snow") and winter_k == 0.0 and time >= float(stage.first_snow):
+		_start_winter()
 	_economy(dt)
 	_villages_tick(dt)
 	for b: Building in buildings.duplicate():
@@ -883,6 +891,10 @@ func _nudge(u: Unit, v: Vector2) -> void:
 
 
 func _process(dt: float) -> void:
+	_music_t -= dt
+	if _music_t <= 0.0:
+		_music_t = 1.0
+		_update_music()
 	for f in floats:
 		f.t += dt
 	floats = floats.filter(func(f): return f.t < 1.6)
@@ -897,6 +909,9 @@ func clear_selection() -> void:
 	if selected_building:
 		selected_building.set_selected(false)
 	selected_building = null
+	if mode == "formation":
+		mode = "normal"
+		formation_armed = ""
 	selection_changed.emit()
 
 
@@ -937,6 +952,7 @@ func focus_home() -> void:
 
 func stop_selected() -> void:
 	for u: Unit in selected:
+		u.clear_formation()
 		u.state = Unit.State.IDLE
 		u.target = null
 		u.path = []
@@ -1313,6 +1329,9 @@ func _tap(screen: Vector2) -> void:
 	if mode == "build":
 		_build_tap(ground)
 		return
+	if mode == "formation":
+		_formation_tap(screen, ground)
+		return
 	var u := _pick_unit(screen)
 	var b := _pick_building(ground)
 	var now := Time.get_ticks_msec() / 1000.0
@@ -1338,6 +1357,7 @@ func _tap(screen: Vector2) -> void:
 	if selected.size() > 0:
 		if enemy != null:
 			for s in selected:
+				s.clear_formation()
 				s.order_attack(enemy)
 			_chatter("attack")
 			_ping(enemy.position, Color("#ff5a4a"))
@@ -1365,6 +1385,7 @@ func _move_selected(ground: Vector3) -> void:
 	var region := _reachable_cells(IRAN, Terrain.cell_of(ground), 9)
 	var used := {}
 	for s in sorted:
+		s.clear_formation()
 		var row := i / cols
 		var col := i % cols
 		var off := Vector3((col - (cols - 1) * 0.5) * spacing, 0, (row - (ceili(float(n) / cols) - 1) * 0.5) * spacing)
@@ -1457,3 +1478,268 @@ func _box_select() -> void:
 	select_units(list)
 	mode = "normal"
 	selection_changed.emit()
+
+
+# ---------------- battle formations ----------------
+signal formation_named(text: String, hint: String)
+signal war_started
+
+
+## Called by the formation icons. Tapping the armed icon again puts it away.
+func arm_formation(k: String) -> void:
+	if selected.is_empty():
+		say("اول سربازانی را انتخاب کن.", TURAN)
+		return
+	if mode == "formation" and formation_armed == k:
+		mode = "normal"
+		formation_armed = ""
+	else:
+		cancel_build()
+		mode = "formation"
+		formation_armed = k
+		formation_named.emit(Defs.FORMATIONS[k].n, Defs.FORMATIONS[k].hint)
+	selection_changed.emit()
+
+
+func _formation_tap(screen: Vector2, ground: Vector3) -> void:
+	var k := formation_armed
+	var troops: Array = selected.filter(func(u): return is_instance_valid(u) and not u.dead)
+	var ok := false
+	if not troops.is_empty():
+		match k:
+			"encircle":
+				var picked := _pick_unit(screen)
+				ok = _form_encircle(troops, picked.position if picked != null and picked.side != IRAN else ground)
+			"ambush":
+				ok = _form_ambush(troops, ground)
+			"wall":
+				ok = _form_wall(troops, ground)
+			"wedge":
+				ok = _form_wedge(troops, ground)
+			"ring":
+				ok = _form_ring(troops, ground)
+	if ok:
+		mode = "normal"
+		formation_armed = ""
+		_chatter("attack" if k in ["encircle", "wedge"] else "move")
+		_ping(ground, Color("#7fe0d0"))
+		selection_changed.emit()
+
+
+func _flat(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+## Nearest open spot for Iran's soldiers.
+func _open_spot(p: Vector3) -> Vector3:
+	var c := _nearest_open(IRAN, Terrain.cell_of(p))
+	if c == Terrain.cell_of(p):
+		return Vector3(p.x, 0, p.z)
+	var cc := Terrain.cell_center_flat(c)
+	return Vector3(cc.x, 0, cc.z)
+
+
+func _group_center(list: Array) -> Vector3:
+	var c := Vector3.ZERO
+	for u in list:
+		c += u.position
+	c /= maxf(1.0, list.size())
+	c.y = 0.0
+	return c
+
+
+## Facing from the group towards the tap (or along the camera when tapped in the middle of them).
+func _march_dir(troops: Array, ground: Vector3) -> Vector3:
+	var d := ground - _group_center(troops)
+	d.y = 0.0
+	if d.length() < 2.0:
+		d = -rig.global_transform.basis.z
+		d.y = 0.0
+	return d.normalized()
+
+
+func _place(u: Unit, spot: Vector3, kind: String, face: Vector3, fight := false) -> void:
+	u.clear_formation()
+	u.order_move(spot, fight)
+	u.formation = kind
+	u.post = spot
+	u.face_dir = face
+
+
+func _form_encircle(troops: Array, ground: Vector3) -> bool:
+	var foes: Array = units.filter(func(u): return not u.dead and u.side != IRAN and not u.hidden and _flat(u.position, ground) < 12.0)
+	if foes.is_empty():
+		say("برای محاصره روی گروهی از دشمن بزن.", TURAN)
+		return false
+	var c := _group_center(foes)
+	var spread := 0.0
+	for f in foes:
+		spread = maxf(spread, _flat(f.position, c))
+	var r := clampf(spread + 4.0, 5.0, 11.0)
+	# keep each soldier on its own side of the ring so the lines do not cross
+	var by_angle := troops.duplicate()
+	by_angle.sort_custom(func(a, b): return atan2(a.position.z - c.z, a.position.x - c.x) < atan2(b.position.z - c.z, b.position.x - c.x))
+	var a0 := atan2(by_angle[0].position.z - c.z, by_angle[0].position.x - c.x)
+	var n := by_angle.size()
+	for i in n:
+		var a := a0 + TAU * i / n
+		var spot := _open_spot(c + Vector3(cos(a), 0, sin(a)) * r)
+		_place(by_angle[i], spot, "encircle", (c - spot).normalized())
+	return true
+
+
+func _form_ambush(troops: Array, ground: Vector3) -> bool:
+	var archers: Array = troops.filter(func(u): return u.type == "archer")
+	if archers.is_empty():
+		say("فقط کمانداران می‌توانند کمین کنند.", TURAN)
+		return false
+	var g0 := Terrain.cell_of(ground)
+	var spots: Array = []
+	for dz in range(-7, 8):
+		for dx in range(-7, 8):
+			var c := g0 + Vector2i(dx, dz)
+			if not Terrain.in_grid(c) or grids[IRAN].is_point_solid(c):
+				continue
+			if terrain.type_at(c) == Terrain.FOREST or terrain.has_tree(c) or _count_near(c, 1, Terrain.FOREST, 1) >= 3:
+				spots.append(c)
+	if spots.is_empty():
+		say("این‌جا درختی برای کمین نیست. نزدیک درختان بزن.", TURAN)
+		return false
+	spots.sort_custom(func(a, b): return Vector2(a - g0).length_squared() < Vector2(b - g0).length_squared())
+	var face := _march_dir(archers, ground)
+	for i in archers.size():
+		var cc := Terrain.cell_center_flat(spots[i % spots.size()])
+		var jitter := Vector3(randf_range(-0.4, 0.4), 0, randf_range(-0.4, 0.4)) if i >= spots.size() else Vector3.ZERO
+		var spot := Vector3(cc.x, 0, cc.z) + jitter
+		_place(archers[i], spot, "ambush", face)
+		archers[i].ambush = true
+	say("کمانداران به کمین می‌روند. تا تیر نزنند، دشمن آن‌ها را نمی‌بیند.", IRAN)
+	return true
+
+
+func _form_wall(troops: Array, ground: Vector3) -> bool:
+	var dir := _march_dir(troops, ground)
+	var right := Vector3(-dir.z, 0, dir.x)
+	var front: Array = troops.filter(func(u): return u.type != "archer")
+	var back: Array = troops.filter(func(u): return u.type == "archer")
+	if front.is_empty():
+		front = back
+		back = []
+	_rows(front, ground, dir, right, 0.0, 0.35)
+	_rows(back, ground, dir, right, -2.6 - 1.6 * floorf((front.size() - 1) / 8.0), 0.15)
+	return true
+
+
+func _rows(list: Array, origin: Vector3, dir: Vector3, right: Vector3, back_off: float, bonus: float) -> void:
+	var per_row := 8
+	for i in list.size():
+		var row := i / per_row
+		var in_row: int = mini(per_row, list.size() - row * per_row)
+		var col := i % per_row
+		var off := right * (col - (in_row - 1) * 0.5) * 1.5 + dir * (back_off - row * 1.6)
+		var spot := _open_spot(origin + off)
+		_place(list[i], spot, "wall", dir)
+		list[i].hold = true
+		list[i].guard_bonus = bonus
+
+
+func _form_wedge(troops: Array, ground: Vector3) -> bool:
+	var dir := _march_dir(troops, ground)
+	var right := Vector3(-dir.z, 0, dir.x)
+	var rank := {"cav": 0, "hero": 1, "immortal": 2, "spear": 3, "archer": 4}
+	var list := troops.duplicate()
+	list.sort_custom(func(a, b): return rank.get(a.type, 3) < rank.get(b.type, 3))
+	for i in list.size():
+		var row := (i + 1) / 2
+		var s := 0.0 if i == 0 else (1.0 if i % 2 == 1 else -1.0)
+		var spot := _open_spot(ground - dir * row * 1.7 + right * s * row * 1.4)
+		_place(list[i], spot, "wedge", dir, true)
+		list[i].charge = list[i].type != "archer"
+	return true
+
+
+func _form_ring(troops: Array, ground: Vector3) -> bool:
+	var outer: Array = troops.filter(func(u): return u.type != "archer")
+	var inner: Array = troops.filter(func(u): return u.type == "archer")
+	if outer.is_empty():
+		outer = inner
+		inner = []
+	var r := maxf(2.6, outer.size() * 1.6 / TAU)
+	for i in outer.size():
+		var a := TAU * i / outer.size()
+		var out := Vector3(cos(a), 0, sin(a))
+		var spot := _open_spot(ground + out * r)
+		_place(outer[i], spot, "ring", out)
+		outer[i].hold = true
+		outer[i].guard_bonus = 0.25
+	for i in inner.size():
+		var a := TAU * i / maxf(1, inner.size())
+		var out := Vector3(cos(a), 0, sin(a))
+		var spot := _open_spot(ground + out * minf(r * 0.45, 1.6))
+		_place(inner[i], spot, "ring", out)
+		inner[i].hold = true
+		inner[i].guard_bonus = 0.25
+	return true
+
+
+func on_ambush_revealed(u: Unit) -> void:
+	if time - _ambush_said > 8.0:
+		_ambush_said = time
+		say("کمانداران از کمین تیر گشودند! دشمن جایشان را یافت.", IRAN)
+
+
+var _ambush_said := -100.0
+
+
+# ---------------- the first snow ----------------
+var _env: Environment
+var _sky_mat: ProceduralSkyMaterial
+var winter_k := 0.0       # 0 before the snow, 1 when the land is white
+
+
+## Stages with "first_snow" start in autumn; at that second the sky greys, snow starts
+## falling and over a minute it settles on the ground, the trees and the lakes.
+func _start_winter() -> void:
+	winter_k = 0.0001
+	say("آسمان تیره شد... نخستین برف زمستان می‌بارد!", IRAN)
+	say("برف کشتزارها را کم‌بار می‌کند. پیش از سرما انبار غذا را پر کن.", TURAN)
+	_add_snowfall()
+	var a: Dictionary = SKIES.get(biome, SKIES.meadow)
+	var b: Dictionary = SKIES.snow
+	var tw := create_tween()
+	tw.tween_method(func(k: float):
+		winter_k = maxf(k, 0.0001)
+		terrain.set_winter(k)
+		_sky_mat.sky_top_color = Color(a.top).lerp(Color(b.top), k)
+		_sky_mat.sky_horizon_color = Color(a.horizon).lerp(Color(b.horizon), k)
+		_sky_mat.ground_horizon_color = Color(a.ground).lerp(Color(b.ground), k)
+		_env.fog_light_color = Color(a.fog).lerp(Color(b.fog), k)
+		_env.fog_density = lerpf(a.fog_d, b.fog_d, k)
+		_env.adjustment_saturation = lerpf(a.sat, b.sat, k)
+		sun.light_color = Color(a.sun).lerp(Color(b.sun), k)
+		sun.light_energy = lerpf(a.sun_e, b.sun_e, k), 0.0, 1.0, 60.0)
+
+
+# ---------------- music ----------------
+var _music_t := 0.0
+var _war_music := false
+var _calm_t := 0.0
+var _wave_t := -100.0
+
+
+func _on_war_started() -> void:
+	_wave_t = time
+
+
+## Calm music while building up, the war march while fighting; back to calm after a quiet spell.
+func _update_music() -> void:
+	var fighting: bool = powers.in_battle() or time - _wave_t < 40.0
+	if fighting:
+		_calm_t = 0.0
+	else:
+		_calm_t += 1.0
+	var want := fighting or (_war_music and _calm_t < 20.0)
+	if want == _war_music and Sfx._music.playing:
+		return
+	_war_music = want
+	Sfx.play_music("res://assets/music/war_theme.ogg" if want else "res://assets/music/peace_theme.ogg", -7.0 if want else -6.0)

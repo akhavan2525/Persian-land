@@ -15,6 +15,7 @@ var _muster: Array = []        # soldiers gathering for the next push
 var _muster_t := 0.0
 var _muster_target := Vector3.ZERO
 var _resting: Array = []       # wounded soldiers sent home to heal
+var _ahead := 0                # Turan soldiers minus Iran soldiers, checked once a second
 
 const COST := {"spear": 8.0, "archer": 9.0, "cav": 14.0, "immortal": 20.0}
 const CAP := 30
@@ -25,9 +26,10 @@ func _ready() -> void:
 	var base: Dictionary = Defs.DIFFICULTY[App.difficulty]
 	var st: Dictionary = App.stage_def()
 	D = {"first": base.first * st.ai.first, "every": base.every * st.ai.every, "base": base.base + st.ai.base,
-		"grow": base.grow * st.ai.grow, "income": base.income * st.ai.income}
+		"grow": base.grow * st.ai.grow, "income": base.income * st.ai.income, "raid": base.raid, "match": base.match}
 	smart = int(st.smart)
 	next_wave = D.first
+	next_raid = D.raid
 	var k = world.keeps[Defs.TURAN]
 	_rally = k.position + Vector3(-3, 0, 4)
 
@@ -48,7 +50,13 @@ func _physics_process(dt: float) -> void:
 	for v: Building in world.villages:
 		if v.side == Defs.TURAN:
 			turan_villages += 1
-	points += (0.55 + turan_villages * 0.25 + world.time / 900.0) * D.income * dt
+	var rate: float = (0.55 + turan_villages * 0.25 + world.time / (900.0 if D.match == 0 else 1500.0)) * D.income
+	# on easy and normal Afrasiab does not race far ahead of the player's own army
+	if D.match > 0 and _think <= 0.0:
+		_ahead = _army().size() - world.units.filter(func(u): return u.side == Defs.IRAN and not u.dead).size()
+	if D.match > 0 and _ahead > D.match:
+		rate *= 0.4
+	points += rate * dt
 	_think -= dt
 	if _think > 0.0:
 		return
@@ -61,7 +69,7 @@ func _physics_process(dt: float) -> void:
 	if smart >= 2:
 		_tend_wounded()
 	if world.time >= next_raid:
-		next_raid = world.time + 80.0
+		next_raid = world.time + D.raid
 		_raid()
 	_resend_idle()
 
@@ -101,7 +109,7 @@ func _defend() -> void:
 	var k = world.keeps[Defs.TURAN]
 	if k == null or k.dead:
 		return
-	var intruders: Array = world.units.filter(func(u): return u.side == Defs.IRAN and not u.dead and u.position.distance_to(k.position) < 26.0)
+	var intruders: Array = world.units.filter(func(u): return u.side == Defs.IRAN and not u.dead and not u.hidden and u.position.distance_to(k.position) < 26.0)
 	if intruders.is_empty():
 		return
 	for u in _army():
@@ -150,6 +158,7 @@ func _launch_wave() -> void:
 		world.say("موج %s: سپاه توران با %s جنگجو به سوی ایران می‌تازد!" % [Defs.fa(wave), Defs.fa(send.size())], Defs.TURAN)
 	Sfx.play("horn")
 	Sfx.voice("turan_attack", true)
+	world.war_started.emit()
 
 
 ## Where to strike: plain waves go for the keep; a cunning Afrasiab hits whatever

@@ -128,6 +128,17 @@ const UNITS := {
 		"cost": {}, "time": 0.0, "desc": "دیو مازندران. روستا را در بند دارد. کشتنش ۴۰ طلا پاداش دارد."},
 }
 const TRAIN_MENU := ["spear", "archer", "cav", "immortal"]
+
+# ---------------- battle formations ----------------
+## Picked from the line icons when soldiers are selected; the next tap places them.
+const FORMATIONS := {
+	"encircle": {"n": "محاصره", "hint": "روی گروه دشمن بزن تا سربازان دورش حلقه بزنند و از هر سو بتازند."},
+	"ambush": {"n": "اختفا", "hint": "نزدیک درختان بزن. کمانداران میان درختان پنهان می‌شوند و تا تیر نزنند دشمن آن‌ها را نمی‌بیند."},
+	"wall": {"n": "دیوار سپر", "hint": "جایی را بزن. پیادگان رو به آن‌جا صف می‌بندند و کمانداران پشتشان. صف یک‌سوم کمتر آسیب می‌بیند."},
+	"wedge": {"n": "پیکان", "hint": "سوی دشمن بزن. سواران در نوک پیکان تندتر می‌تازند و ضربه‌ی نخستشان دو برابر است."},
+	"ring": {"n": "حلقه‌ی دفاعی", "hint": "جایی را بزن. سربازان رو به بیرون حلقه می‌زنند و کمانداران در میانه می‌مانند."},
+}
+const FORMATION_ORDER := ["encircle", "ambush", "wall", "wedge", "ring"]
 const HEROES := [
 	{"n": "رستم", "desc": "جهان‌پهلوان، با گرز گاوسر. اگر بیفتد، سیمرغ پس از ۴۵ ثانیه او را به دژ بازمی‌گرداند."},
 	{"n": "افراسیاب", "desc": "شاه توران. اگر بیفتد، پس از مدتی از غار پنهانش بازمی‌گردد."},
@@ -159,9 +170,11 @@ const CAPTURE_TIME := 6.0
 
 # ---------------- difficulty ----------------
 const DIFFICULTY := {
-	"easy": {"n": "آسان", "first": 210.0, "every": 200.0, "base": 3, "grow": 1.0, "income": 0.8},
-	"normal": {"n": "معمولی", "first": 160.0, "every": 160.0, "base": 4, "grow": 1.6, "income": 1.0},
-	"hard": {"n": "سخت", "first": 110.0, "every": 120.0, "base": 6, "grow": 2.2, "income": 1.35},
+	# time to gather an army between waves; Turan trains about as fast as the player can.
+	# match: Turan income slows while its army is this much larger than Iran's (0 = never)
+	"easy": {"n": "آسان", "first": 300.0, "every": 280.0, "base": 2, "grow": 0.9, "income": 0.6, "raid": 150.0, "match": 3},
+	"normal": {"n": "معمولی", "first": 240.0, "every": 230.0, "base": 3, "grow": 1.2, "income": 0.75, "raid": 120.0, "match": 6},
+	"hard": {"n": "سخت", "first": 150.0, "every": 150.0, "base": 5, "grow": 1.8, "income": 1.1, "raid": 90.0, "match": 0},
 }
 
 
@@ -182,6 +195,10 @@ const STAGES := [
 		"story": "پس از شکست در جیحون، سپاه توران در دشت‌های زرین خاوران گرد آمده است. این بار تورانیان زودتر می‌تازند و سپاهشان را پیش از حمله یکجا گرد می‌آورند.",
 		"ai": {"first": 0.85, "every": 0.92, "base": 1, "grow": 1.15, "income": 1.12}, "smart": 1,
 		"turan": {"keep": 2, "tower": 1, "barracks": 1, "extra": 2}, "divs": [1, 2, 2], "bonus": {"wood": 20}},
+	{"n": "نخستین برف", "biome": "meadow", "seed": 3929, "first_snow": 70.0,
+		"story": "پاییز است و سپاه ایران در دامنه‌ی دماوند اردو زده. پیران می‌گویند زمستان زودتر از هر سال می‌رسد. کمی پس از آغاز نبرد آسمان تیره می‌شود، برف می‌بارد و همه‌جا سفید می‌شود. کشتزارها کم‌بار می‌شوند و دریاچه‌ها یخ می‌بندند.",
+		"ai": {"first": 0.82, "every": 0.9, "base": 1, "grow": 1.2, "income": 1.15}, "smart": 1,
+		"turan": {"keep": 2, "tower": 1, "barracks": 2, "extra": 2}, "divs": [1, 2, 2], "bonus": {"food": 30, "wood": 20}},
 	{"n": "جنگل‌های مازندران", "biome": "forest", "seed": 3313,
 		"story": "دیو سپید و یارانش جنگل‌های انبوه مازندران را گرفته‌اند و افراسیاب با آنان پیمان بسته است. روستاها پر از دیوند و راه‌ها از میان درختان می‌گذرد.",
 		"ai": {"first": 0.8, "every": 0.88, "base": 1, "grow": 1.25, "income": 1.2}, "smart": 1,

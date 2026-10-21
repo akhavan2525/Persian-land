@@ -32,6 +32,16 @@ var _stuck_n := 0                 # progress checks in a row with almost no move
 var _crowd_t := 0.0
 var _retarget_t := 0.0
 
+# battle formations (see World.apply_formation)
+var formation := ""               # the formation this unit is standing in, "" for none
+var hold := false                 # keep the post: fight what comes close, do not chase far
+var post := Vector3.ZERO          # its place in the formation
+var face_dir := Vector3.ZERO      # which way to look once there
+var guard_bonus := 0.0            # less harm taken while standing at its post
+var charge := false               # wedge: faster march, the first blow lands twice as hard
+var ambush := false               # archers on their way to hide among the trees
+var hidden := false               # hidden archers are invisible to the enemy until they shoot
+
 var model: Node3D
 var rig := {}
 var anim: AnimationPlayer
@@ -114,6 +124,53 @@ func display_name() -> String:
 	return Defs.unit_name(type, side)
 
 
+# ---------------- formations ----------------
+## Drops any formation, e.g. when the player gives a new plain order.
+func clear_formation() -> void:
+	formation = ""
+	hold = false
+	guard_bonus = 0.0
+	charge = false
+	ambush = false
+	face_dir = Vector3.ZERO
+	set_hidden(false)
+
+
+func at_post() -> bool:
+	return Vector2(post.x - position.x, post.z - position.z).length() < 1.6
+
+
+## Harm taken is multiplied by this (shield wall and the defensive ring guard their men).
+func harm_mult() -> float:
+	if hold and guard_bonus > 0.0 and at_post():
+		return 1.0 - guard_bonus
+	return 1.0
+
+
+func move_speed() -> float:
+	return def.speed * (1.25 if charge and state != State.ATTACK else 1.0)
+
+
+func set_hidden(v: bool) -> void:
+	if hidden == v:
+		return
+	hidden = v
+	# our own player still sees them, faded like a shadow among the trees
+	for mi in model.find_children("*", "GeometryInstance3D", true, false):
+		(mi as GeometryInstance3D).transparency = 0.55 if v else 0.0
+	if v and target != null:
+		target = null
+		state = State.IDLE
+
+
+## Shoots from cover: the enemy learns where the archer stands.
+func reveal() -> void:
+	if hidden:
+		set_hidden(false)
+		ambush = false
+		formation = ""
+
+
 # ---------------- orders ----------------
 func order_move(p: Vector3, fight := false) -> void:
 	if dead:
@@ -167,9 +224,20 @@ func tick(dt: float) -> void:
 			if scan_t <= 0.0:
 				scan_t = 0.5
 				var aggro := maxf(def.range + 3.0, 10.0)
+				if hold and type != "archer":
+					aggro = def.range + 2.5     # a wall waits for the enemy to come to it
 				var e = world.nearest_enemy(self, aggro, false)
 				if e:
 					order_attack(e)
+			if state != State.IDLE:
+				pass
+			elif ambush and not hidden and at_post():
+				set_hidden(true)
+			elif hold and not at_post() and not hidden:
+				# pushed out of line: step back into place
+				state = State.MOVE
+				dest = post
+				_repath(post)
 		State.GUARD:
 			if scan_t <= 0.0:
 				scan_t = 0.5
@@ -195,6 +263,13 @@ func tick(dt: float) -> void:
 
 func _arrive() -> void:
 	state = State.IDLE if type != "div" else State.GUARD
+	if face_dir != Vector3.ZERO:
+		rotation.y = atan2(-face_dir.x, -face_dir.z)
+	if formation == "encircle":
+		# the ring is closed: strike the nearest foe inside it
+		var e = world.nearest_enemy(self, 16.0, false)
+		if e:
+			order_attack(e)
 	path = []
 	path_i = 0
 	_stuck_n = 0
@@ -227,6 +302,8 @@ func _target_alive() -> bool:
 	if target == null or not is_instance_valid(target):
 		return false
 	if target is Unit:
+		if (target as Unit).hidden and (target as Unit).side != side:
+			return false
 		return not (target as Unit).dead
 	return not target.dead
 
@@ -248,6 +325,13 @@ func _attack_tick(dt: float) -> void:
 		state = State.GUARD
 		return
 	var d: float = world.distance_to_target(self, target)
+	if hold and d > def.range and position.distance_to(post) > 3.0:
+		# do not chase far from the line: go back to the post
+		target = null
+		state = State.MOVE
+		dest = post
+		_repath(post)
+		return
 	if d > def.range:
 		_retarget_t -= dt
 		if _retarget_t <= 0.0:
@@ -278,9 +362,18 @@ func _attack_tick(dt: float) -> void:
 				anim.play(anim_names["attack"], 0.08)
 				anim.seek(0.0, true)
 			if type == "archer":
+				if hidden:
+					reveal()
+					world.on_ambush_revealed(self)
 				world.spawn_arrow(self, target, def.dmg * dmg_mult)
 			else:
-				world.deal_damage(self, target, def.dmg * dmg_mult)
+				var blow: float = def.dmg * dmg_mult
+				if charge:
+					# the wedge strikes: horsemen hit twice as hard, foot soldiers half again
+					blow *= 2.0 if type == "cav" else 1.5
+					charge = false
+					formation = ""
+				world.deal_damage(self, target, blow)
 		return
 	# chase: close in directly when the way is clear, otherwise follow a fresh path
 	var goal: Vector3 = world.approach_point(self, target)
@@ -303,7 +396,7 @@ func _follow(dt: float, goal: Vector3) -> bool:
 	_check_progress(dt, goal)
 	var wp: Vector3 = path[path_i]
 	var to := Vector2(wp.x - position.x, wp.z - position.z)
-	var step: float = def.speed * dt
+	var step: float = move_speed() * dt
 	# corners do not need to be hit exactly; this keeps groups flowing through them
 	if path_i < path.size() - 1 and to.length() < 0.6:
 		path_i += 1
@@ -337,7 +430,7 @@ func _check_progress(dt: float, goal: Vector3) -> void:
 	if _prog_t < 1.2:
 		return
 	var moved := Vector2(position.x - _prog_pos.x, position.z - _prog_pos.z).length()
-	if moved < def.speed * 0.3:
+	if moved < move_speed() * 0.3:
 		_stuck_n += 1
 		var g := goal
 		if _stuck_n >= 2:
@@ -374,6 +467,10 @@ func take_damage(amount: float, attacker: Node3D) -> void:
 		return
 	# fight back when idle or guarding
 	if attacker != null and is_instance_valid(attacker) and (state == State.IDLE or state == State.GUARD) and attacker.side != side:
+		if hold and type != "archer" and position.distance_to(attacker.position) > def.range + 3.0:
+			return     # arrows from afar do not break the line
+		if hidden:
+			return     # still unseen: keep waiting for a clear shot
 		order_attack(attacker)
 
 

@@ -107,6 +107,17 @@ func play_music(path: String, volume_db := -4.0) -> void:
 		return
 	if st is AudioStreamOggVorbis:
 		(st as AudioStreamOggVorbis).loop = true
+	if _music.playing:
+		# another song is on: let it fade away first, then bring in the new one
+		if _music_tw:
+			_music_tw.kill()
+		_music_tw = create_tween()
+		_music_tw.tween_property(_music, "volume_db", -40.0, 1.5)
+		_music_tw.tween_callback(func():
+			_music.stream = st
+			_music.play()
+			_fade_music(volume_db, 2.0))
+		return
 	_music.stream = st
 	_music.volume_db = -40.0
 	_music.play()

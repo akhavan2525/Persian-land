@@ -51,6 +51,14 @@ func _ready() -> void:
 			var so = load("res://scripts/dev/simorghshot.gd").new()
 			so.out = a.substr(14)
 			add_child(so)
+		if a.begins_with("--formtest="):
+			var ft = load("res://scripts/dev/formtest.gd").new()
+			ft.out = a.substr(11)
+			add_child(ft)
+		if a.begins_with("--menushot="):
+			var ms = load("res://scripts/dev/menushot.gd").new()
+			ms.out = a.substr(11)
+			add_child(ms)
 		if a == "--wavetest":
 			add_child(load("res://scripts/dev/wavetest.gd").new())
 		if a.begins_with("--stageshots="):

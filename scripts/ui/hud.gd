@@ -31,6 +31,10 @@ var _refresh_t := 0.0
 var blockers: Array[Control] = []
 var power_row: HBoxContainer
 var power_btns := {}           # power -> {bar, ring, label}
+var form_row: HBoxContainer
+var form_btns := {}            # formation -> icon button
+var form_title: VBoxContainer
+var _form_tw: Tween
 
 
 ## True when a screen point is on a panel or button, so the world ignores that touch.
@@ -66,6 +70,7 @@ func _ready() -> void:
 	_build_bottom_bar()
 	_build_power_row()
 	_build_side_tools()
+	_build_formation_row()
 	_build_selection_panel()
 	_build_build_panel()
 	_build_toasts()
@@ -73,6 +78,8 @@ func _ready() -> void:
 	_build_dialogs()
 
 	world.message.connect(_on_message)
+	world.formation_named.connect(_on_formation_named)
+	world.war_started.connect(_show_war_emblem)
 	world.selection_changed.connect(_on_selection)
 	world.game_over.connect(_on_game_over)
 	_on_selection()
@@ -390,6 +397,88 @@ func _build_side_tools() -> void:
 	vb.add_child(box_btn)
 
 
+# ---------------- formations ----------------
+## Line icons with no words; the name shows at the top of the screen when one is tapped.
+func _build_formation_row() -> void:
+	form_row = HBoxContainer.new()
+	form_row.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	form_row.offset_left = 6
+	form_row.offset_top = -86
+	form_row.add_theme_constant_override("separation", 4)
+	root.add_child(form_row)
+	blockers.append(form_row)
+	for k in Defs.FORMATION_ORDER:
+		var b = preload("res://scripts/ui/formation_icon.gd").new()
+		b.kind = k
+		b.pressed.connect(world.arm_formation.bind(k))
+		form_row.add_child(b)
+		form_btns[k] = b
+	form_row.visible = false
+	# the formation's name, large at the top, with a line on how to place it
+	form_title = VBoxContainer.new()
+	form_title.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	form_title.offset_top = 196
+	form_title.offset_left = -330
+	form_title.offset_right = 330
+	form_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	form_title.alignment = BoxContainer.ALIGNMENT_CENTER
+	var t := _label("", 40, App.GOLD, App.font_display)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	t.add_theme_constant_override("outline_size", 10)
+	form_title.add_child(t)
+	var h := _label("", 16, App.IVORY)
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	h.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	h.add_theme_constant_override("outline_size", 6)
+	form_title.add_child(h)
+	form_title.modulate.a = 0.0
+	root.add_child(form_title)
+
+
+func _on_formation_named(text: String, hint: String) -> void:
+	(form_title.get_child(0) as Label).text = text
+	(form_title.get_child(1) as Label).text = hint
+	if _form_tw:
+		_form_tw.kill()
+	form_title.modulate.a = 1.0
+	_form_tw = form_title.create_tween()
+	_form_tw.tween_interval(3.5)
+	_form_tw.tween_property(form_title, "modulate:a", 0.0, 0.8)
+
+
+## The crossed swords of Iran rise in the middle of the screen when a Turan wave sets out.
+func _show_war_emblem() -> void:
+	var em := TextureRect.new()
+	em.texture = load("res://assets/ui/war_emblem.png")
+	em.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	em.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	em.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	em.set_anchors_preset(Control.PRESET_CENTER)
+	em.offset_left = -150
+	em.offset_right = 150
+	em.offset_top = -170
+	em.offset_bottom = 130
+	em.pivot_offset = Vector2(150, 150)
+	em.scale = Vector2(0.5, 0.5)
+	em.modulate.a = 0.0
+	root.add_child(em)
+	var tw := em.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(em, "modulate:a", 1.0, 0.35)
+	tw.tween_property(em, "scale", Vector2.ONE, 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_interval(1.8)
+	tw.chain().tween_property(em, "modulate:a", 0.0, 0.8)
+	tw.chain().tween_callback(em.queue_free)
+
+
+func _refresh_formations() -> void:
+	form_row.visible = world.selected.size() > 0 and world.mode in ["normal", "formation"]
+	for k in form_btns:
+		form_btns[k].armed = world.mode == "formation" and world.formation_armed == k
+
+
 # ---------------- selection panel ----------------
 func _build_selection_panel() -> void:
 	sel_panel = PanelContainer.new()
@@ -412,6 +501,7 @@ func _on_selection() -> void:
 	for t in build_buttons:
 		build_buttons[t].set_pressed_no_signal(world.mode == "build" and world.build_type == t)
 	box_btn.set_pressed_no_signal(world.mode == "box")
+	_refresh_formations()
 	build_panel.visible = world.mode == "build"
 	if world.mode == "build":
 		_refresh_build_hint()

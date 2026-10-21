@@ -27,6 +27,11 @@ var _rocks := [Vector3(-30, 56, 5.5), Vector3(-62, 34, 4.5), Vector3(30, -56, 5.
 
 
 var biome := "meadow"
+# materials the coming of winter repaints (see set_winter)
+var _water_mat: ShaderMaterial
+var _far_mat: StandardMaterial3D
+var _leaf_mats: Array = []
+var _grass_mat: StandardMaterial3D
 
 
 ## Builds the land. The first stage keeps its hand-made layout; later stages scatter
@@ -395,6 +400,7 @@ func _build_water() -> void:
 	var m := ShaderMaterial.new()
 	m.shader = load("res://assets/shaders/water.gdshader")
 	m.set_shader_parameter("ice", look().ice)
+	_water_mat = m
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
@@ -409,6 +415,7 @@ func _build_far_ground() -> void:
 	mi.position.y = -2.5
 	var m := StandardMaterial3D.new()
 	m.albedo_color = look().far
+	_far_mat = m
 	m.roughness = 1.0
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -457,6 +464,7 @@ func _nature_mesh(file: String) -> Mesh:
 			fm.set_shader_parameter("leaf_tex", tex)
 			fm.set_shader_parameter("leaf_tint", look().leaf)
 			fm.set_shader_parameter("snow_amt", look().leaf_snow)
+			_leaf_mats.append(fm)
 			mesh.surface_set_material(i, fm)
 		else:
 			var m := StandardMaterial3D.new()
@@ -574,7 +582,8 @@ func _scatter_grass() -> void:
 		var s := rng.randf_range(0.6, 1.3)
 		xs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s)), Vector3(x, h + 0.2 * s, z)))
 		cs.append(Color("#4f7a2a").lerp(Color("#7f9a3a"), rng.randf()))
-	_multimesh(blade, xs, cs, vc_material(1.0), false)
+	_grass_mat = vc_material(1.0)
+	_multimesh(blade, xs, cs, _grass_mat, false)
 
 
 # ---------------- territory overlay ----------------
@@ -594,3 +603,22 @@ func set_zones(zones: Array) -> void:
 
 func set_grid_visible(v: bool) -> void:
 	terrain_material.set_shader_parameter("grid_alpha", 0.35 if v else 0.0)
+
+
+## Snow settling over the land: 0 = the land as built, 1 = deep winter.
+func set_winter(k: float) -> void:
+	var a: Dictionary = look()
+	var b: Dictionary = LOOK.snow
+	terrain_material.set_shader_parameter("grass_tint", a.grass.lerp(b.grass, k))
+	terrain_material.set_shader_parameter("snow_cover", lerpf(a.snow, b.snow, k))
+	terrain_material.set_shader_parameter("sand_cover", lerpf(a.sand, b.sand, k))
+	for fm: ShaderMaterial in _leaf_mats:
+		fm.set_shader_parameter("leaf_tint", a.leaf.lerp(b.leaf, k))
+		fm.set_shader_parameter("snow_amt", lerpf(a.leaf_snow, b.leaf_snow, k))
+	if _water_mat:
+		_water_mat.set_shader_parameter("ice", lerpf(a.ice, 0.85, clampf(k * 1.3 - 0.3, 0.0, 1.0)))
+	if _far_mat:
+		_far_mat.albedo_color = a.far.lerp(b.far, k)
+	if _grass_mat:
+		# the grass blades vanish under the snow
+		_grass_mat.albedo_color = Color.WHITE.lerp(Color(2.2, 2.3, 2.4), k)
