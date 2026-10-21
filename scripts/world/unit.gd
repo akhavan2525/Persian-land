@@ -41,6 +41,7 @@ var guard_bonus := 0.0            # less harm taken while standing at its post
 var charge := false               # wedge: faster march, the first blow lands twice as hard
 var ambush := false               # archers on their way to hide among the trees
 var hidden := false               # hidden archers are invisible to the enemy until they shoot
+var tribe := ""                # warriors lent by an allied tribe
 
 var model: Node3D
 var rig := {}
@@ -121,6 +122,8 @@ func set_selected(v: bool) -> void:
 
 
 func display_name() -> String:
+	if tribe != "":
+		return "%s · %s" % [Defs.unit_name(type, side), tribe]
 	return Defs.unit_name(type, side)
 
 

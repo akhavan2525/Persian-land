@@ -489,6 +489,7 @@ func _build_selection_panel() -> void:
 	sel_panel.offset_top = 60
 	sel_panel.custom_minimum_size.x = 394
 	sel_panel.draw.connect(App.draw_ornate_corners.bind(sel_panel))
+	sel_panel.z_index = 1   # above the message strip, which used to hide its title
 	root.add_child(sel_panel)
 	blockers.append(sel_panel)
 	sel_box = VBoxContainer.new()
@@ -594,6 +595,9 @@ func _fill_building(b: Building) -> void:
 	if b.type == "village":
 		title = "روستا · " + ("آزاد" if b.side < 0 else Defs.FACTIONS[b.side].n)
 	sel_box.add_child(_label(title, 24, App.GOLD, App.font_display))
+	if b.type == "camp":
+		_fill_camp(b)
+		return
 	var d := _label(Defs.BUILDINGS[b.type].desc, 15, App.MUTED)
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sel_box.add_child(d)
@@ -638,6 +642,57 @@ func _fill_building(b: Building) -> void:
 				sel_box.add_child(_label("هر %s ثانیه %s %s" % [Defs.fa(int(bd.every)), Defs.fa(amt), Defs.RES_NAMES[bd.res]], 15, App.TURQ))
 	if b.type not in ["keep", "village"]:
 		sel_box.add_child(_button("تخریب (نیمی از هزینه برمی‌گردد)", "", world.demolish_selected))
+
+
+## A tribe's camp: who it trusts, its pact, and the gift button.
+func _fill_camp(b: Building) -> void:
+	var t: Dictionary = world.tribe_of(b)
+	if t.is_empty():
+		return
+	var status := "آزاد، هنوز با کسی پیمان نبسته"
+	if b.ally == Defs.IRAN:
+		status = "هم‌پیمان ایران"
+	elif b.ally == Defs.TURAN:
+		status = "هم‌پیمان افراسیاب!"
+	sel_box.add_child(_label(status, 17, Defs.faction_color[b.ally].lightened(0.35) if b.ally >= 0 else App.TURQ))
+	for s in [Defs.IRAN, Defs.TURAN]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var l := _label("اعتماد به %s" % Defs.FACTIONS[s].n, 15)
+		l.custom_minimum_size.x = 120
+		row.add_child(l)
+		var bar := ProgressBar.new()
+		bar.max_value = Defs.TRIBE_PACT
+		bar.value = t.trust[s]
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(170, 14)
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var fill := StyleBoxFlat.new()
+		fill.bg_color = Defs.faction_color[s].lightened(0.15)
+		fill.set_corner_radius_all(4)
+		var bg := StyleBoxFlat.new()
+		bg.bg_color = Color(0, 0, 0, 0.45)
+		bg.set_corner_radius_all(4)
+		bar.add_theme_stylebox_override("fill", fill)
+		bar.add_theme_stylebox_override("background", bg)
+		row.add_child(bar)
+		sel_box.add_child(row)
+	var how := ""
+	match b.ally:
+		-1:
+			how = "با هدیه، و با کشتن دشمن و آزاد کردن روستاهای نزدیکشان، اعتمادشان پر می‌شود و پیمان می‌بندند. افراسیاب هم فرستاده می‌فرستد!"
+		Defs.IRAN:
+			how = "هر %s ثانیه %s جنگجو می‌فرستند و هر %s ثانیه %s طلا سهم می‌گیرند. اگر طلا نباشد یا افراسیاب دلشان را ببرد، پیمان می‌شکند." % [
+				Defs.fa(int(Defs.TRIBE_SEND_EVERY)), Defs.fa(Defs.TRIBE_SEND), Defs.fa(int(Defs.TRIBE_TRIBUTE_EVERY)), Defs.fa(Defs.TRIBE_TRIBUTE)]
+		Defs.TURAN:
+			how = "برای افراسیاب جنگجو می‌فرستند. با هدیه، اعتمادشان به توران را بشکن تا پیمانشان بشکند."
+	var hl := _label(how, 14, App.MUTED)
+	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sel_box.add_child(hl)
+	var gift := _button("هدیه بفرست  ·  %s" % Defs.cost_text(Defs.TRIBE_GIFT), "", world.gift_tribe.bind(b))
+	gift.disabled = not world.afford(Defs.IRAN, Defs.TRIBE_GIFT) or (b.ally == Defs.IRAN and t.trust[Defs.IRAN] >= Defs.TRIBE_PACT)
+	gift.custom_minimum_size.y = 56
+	sel_box.add_child(gift)
 
 
 ## Level and the upgrade button, the same for every building.
@@ -957,6 +1012,9 @@ func _selection_signature() -> String:
 	if b != null and is_instance_valid(b):
 		parts.append("b%d:%d:%d:%d:%d" % [b.get_instance_id(), int(b.hp / 20.0), b.level, b.queue.size(), b.side])
 		var r: Dictionary = world.res[Defs.IRAN]
+		if b.type == "camp":
+			var t: Dictionary = world.tribe_of(b)
+			parts.append("c%d,%d,%d,%s" % [int(t.trust[0] / 2.0), int(t.trust[1] / 2.0), b.ally, world.afford(Defs.IRAN, Defs.TRIBE_GIFT)])
 		if b.type in ["keep", "barracks"]:
 			parts.append("%d,%d,%d,%d,%d" % [r.wood / 5, r.stone / 5, r.food / 5, r.gold / 5, world.pop_used(Defs.IRAN)])
 	return "|".join(parts)

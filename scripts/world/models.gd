@@ -384,7 +384,7 @@ static func make_building(type: String, owner: int, level := 1) -> Node3D:
 ## at the front corners, level 3 gold caps and two more at the back, level 4 a gold ring.
 static func level_marks(type: String, owner: int, level: int) -> Node3D:
 	var root := Node3D.new()
-	if level < 2 or type in ["keep", "village"]:
+	if level < 2 or type in ["keep", "village", "camp"]:
 		return root
 	var fc: Color = Defs.faction_color[clampi(owner, 0, 2)] if owner >= 0 else Color("#9a9488")
 	var gold := Color("#d9a53a")
@@ -417,7 +417,7 @@ static func level_marks(type: String, owner: int, level: int) -> Node3D:
 static func _build_building(type: String, owner: int, level := 1) -> Node3D:
 	var size: int = Defs.BUILDINGS[type].size
 	var target := {"keep": 9.0 + level * 1.5, "house": 3.5, "farm": 2.5, "woodcutter": 3.2, "quarry": 3.0,
-		"barracks": 4.5, "tower": 7.0, "wall": 3.2, "gate": 3.8, "village": 4.0}
+		"barracks": 4.5, "tower": 7.0, "wall": 3.2, "gate": 3.8, "village": 4.0, "camp": 3.0}
 	var fit := {"keep": 0.84 + level * 0.08, "tower": 1.1, "house": 0.9, "village": 0.95, "farm": 1.0, "barracks": 0.98}
 	var glb := load_override("buildings", type, owner, target.get(type, 3.0), size * Defs.CELL * fit.get(type, 0.96))
 	if glb:
@@ -436,6 +436,7 @@ static func _build_building(type: String, owner: int, level := 1) -> Node3D:
 		"wall": _wall(root)
 		"gate": _gate(root)
 		"village": _village(root, fc)
+		"camp": _camp(root, fc)
 	return root
 
 
@@ -604,6 +605,31 @@ static func _village(root: Node3D, fc: Color) -> void:
 	part(root, cyl_mesh(0.55, 0.6, 0.6, 10), STONE, Vector3(0, 0.3, 0))
 	part(root, cyl_mesh(0.42, 0.42, 0.62, 10), Color("#24485a"), Vector3(0, 0.32, 0))
 	_flag(root, Vector3(0.4, 0, 0.9), fc, 3.4)
+
+
+## A tribe's camp: felt tents round a fire, and a banner in the colour of its ally.
+static func _camp(root: Node3D, fc: Color) -> void:
+	var felt := [Color("#d8c7a4"), Color("#c4ab82"), Color("#b98f63")]
+	var spots := [Vector3(-1.7, 0, -1.3), Vector3(1.6, 0, -1.5), Vector3(-1.5, 0, 1.6), Vector3(1.7, 0, 1.3)]
+	for i in spots.size():
+		var p: Vector3 = spots[i]
+		var r := 1.0 if i % 2 == 0 else 0.85
+		part(root, cyl_mesh(r * 0.98, r, 0.9, 12), felt[i % 3], p + Vector3(0, 0.45, 0))
+		part(root, cyl_mesh(0.08, r * 1.02, 0.9, 12), felt[(i + 1) % 3], p + Vector3(0, 1.35, 0))
+		part(root, cyl_mesh(r * 1.0, r * 1.0, 0.12, 12), Color("#7a2f22"), p + Vector3(0, 0.85, 0))
+		part(root, box_mesh(Vector3(0.45, 0.6, 0.06)), WOOD_DARK, p + Vector3(0, 0.3, r - 0.02))
+	# the fire
+	for k in 5:
+		var a := TAU * k / 5.0
+		part(root, cyl_mesh(0.06, 0.07, 0.8, 5), WOOD, Vector3(cos(a) * 0.25, 0.2, sin(a) * 0.25), Vector3(0.5 * sin(a), 0, -0.5 * cos(a)))
+	for k in 7:
+		var a := TAU * k / 7.0
+		part(root, sphere_mesh(0.14, 0.2, 6), STONE_DARK, Vector3(cos(a) * 0.55, 0.05, sin(a) * 0.55))
+	part(root, cyl_mesh(0.0, 0.28, 0.6, 8), Color("#ff9a2e"), Vector3(0, 0.4, 0), Vector3.ZERO, Vector3.ONE, 1.0)
+	# a rack of spears and the banner
+	for k in 3:
+		part(root, cyl_mesh(0.025, 0.03, 2.0, 5), WOOD_DARK, Vector3(-0.3 + k * 0.15, 1.0, -2.6), Vector3(0.15, 0, 0))
+	_flag(root, Vector3(0.2, 0, -0.4), fc, 3.6)
 
 
 # ---------------- baking ----------------

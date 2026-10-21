@@ -48,6 +48,12 @@ func _draw() -> void:
 			continue
 		var col := Color("#d8cdb2") if b.side < 0 else Defs.faction_color[b.side].lightened(0.15)
 		var s := maxf(3.0, b.size * Defs.CELL * size.x / (Defs.GRID * Defs.CELL))
+		if b.type == "camp":
+			# a tent mark in the colour of the tribe's ally
+			var tc := Color("#e8d6a8") if b.ally < 0 else Defs.faction_color[b.ally].lightened(0.3)
+			var p := _to_map(b.position)
+			draw_colored_polygon(PackedVector2Array([p + Vector2(0, -s), p + Vector2(s, s * 0.7), p + Vector2(-s, s * 0.7)]), tc)
+			continue
 		draw_rect(Rect2(_to_map(b.position) - Vector2(s, s) * 0.5, Vector2(s, s)), col)
 	for u: Unit in world.units:
 		if u.dead:

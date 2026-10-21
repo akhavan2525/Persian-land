@@ -55,6 +55,14 @@ func _ready() -> void:
 			var ft = load("res://scripts/dev/formtest.gd").new()
 			ft.out = a.substr(11)
 			add_child(ft)
+		if a.begins_with("--wintershot="):
+			var wi = load("res://scripts/dev/wintershot.gd").new()
+			wi.out = a.substr(13)
+			add_child(wi)
+		if a.begins_with("--tribeshot="):
+			var tr = load("res://scripts/dev/tribeshot.gd").new()
+			tr.out = a.substr(12)
+			add_child(tr)
 		if a.begins_with("--panelshot="):
 			var ps = load("res://scripts/dev/panelshot.gd").new()
 			ps.out = a.substr(12)
@@ -71,6 +79,8 @@ func _ready() -> void:
 			add_child(ss)
 		if a == "--chaintest":
 			add_child(load("res://scripts/dev/chaintest.gd").new())
+		if a == "--campcheck":
+			add_child(load("res://scripts/dev/campcheck.gd").new())
 		if a == "--pathtest":
 			add_child(load("res://scripts/dev/pathtest.gd").new())
 		if a.begins_with("--shots="):
@@ -147,7 +157,7 @@ static func draw_ornate_corners(c: Control) -> void:
 	c.draw_rect(r.grow(-1.5), gold, false, 2.0)
 	c.draw_rect(r.grow(-9.5), Color(gold, 0.85), false, 2.0)
 	var tex: Texture2D = load("res://assets/ui/panel.png")
-	var k := 52.0
+	var k := 46.0
 	var src := Rect2(0, 0, 58, 58)
 	c.draw_texture_rect_region(tex, Rect2(-6, -6, k, k), src)
 	c.draw_texture_rect_region(tex, Rect2(r.size.x + 6 - k, -6, k, k), Rect2(240 - 58, 0, 58, 58))
@@ -245,7 +255,7 @@ func _make_theme() -> Theme:
 	t.set_type_variation("Ornate", "PanelContainer")
 	# The in-game info panel changes height all the time, so its frame is flat
 	# (it never stretches); the four tile corners are drawn on top by draw_ornate_corners.
-	var ornate := box(Color(0.16, 0.09, 0.05, 0.95), LAPIS_3, 14, 7, 38)
+	var ornate := box(Color(0.16, 0.09, 0.05, 0.95), LAPIS_3, 14, 7, 44)
 	ornate.content_margin_top = 34
 	ornate.content_margin_bottom = 30
 	ornate.shadow_color = Color(0, 0, 0, 0.35)

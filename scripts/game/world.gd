@@ -26,6 +26,7 @@ var structures := {}            # cell index -> Building (blocking footprint)
 var grids: Array = []           # AStarGrid2D per side (0, 1, 2)
 var keeps := [null, null]
 var villages: Array = []
+var tribes: Array = []          # {b, n, units, trust: [iran, turan], send_t, tribute_t, men}
 
 var res := [{}, {}]
 var heroes_down := [0.0, 0.0]
@@ -338,6 +339,7 @@ func _setup_castles() -> void:
 	for vc in Defs.VILLAGE_CELLS:
 		var v := _add_building("village", -1, vc - Vector2i(1, 1))
 		villages.append(v)
+	_setup_tribes()
 	# starting armies
 	var ip: Vector3 = keeps[IRAN].position
 	spawn_unit("hero", IRAN, ip + Vector3(6, 0, -5))
@@ -617,6 +619,7 @@ func on_unit_killed(u: Unit, killer: Node3D) -> void:
 	Sfx.play_at("death", u.position, -3.0)
 	units.erase(u)
 	selected.erase(u)
+	_tribe_deed(u, killer)
 	if u.type == "div":
 		if killer != null and is_instance_valid(killer) and killer.side in [0, 1]:
 			res[killer.side].gold += 40
@@ -680,7 +683,7 @@ func pop_used(side: int) -> int:
 		if b.side == side:
 			n += Defs.BUILDINGS[b.type].pop
 	for u: Unit in units:
-		if u.side == side and u.type != "hero":
+		if u.side == side and u.type != "hero" and u.tribe == "":
 			n += 1
 	for b: Building in buildings:
 		if b.side == side and b.type == "barracks":
@@ -778,6 +781,9 @@ func _villages_tick(dt: float) -> void:
 					v.set_side(s)
 					_update_zones()
 					Sfx.voice("village_won" if s == IRAN else "village_lost", true)
+					for t: Dictionary in tribes:
+						if prev == -1 and _flat(t.b.position, v.position) < 45.0:
+							_tribe_trust(t, s, Defs.TRIBE_FREE_TRUST, "روستای همسایه آزاد شد")
 					if s == IRAN:
 						say("روستا به دست ایران افتاد. سرزمین ایران بزرگ‌تر شد!" if prev == -1 else "روستا را از توران پس گرفتیم!", IRAN)
 					else:
@@ -825,6 +831,7 @@ func _physics_process(dt: float) -> void:
 		_start_winter()
 	_economy(dt)
 	_villages_tick(dt)
+	_tribes_tick(dt)
 	for b: Building in buildings.duplicate():
 		b.tick(dt)
 	for u: Unit in units.duplicate():
@@ -1743,3 +1750,169 @@ func _update_music() -> void:
 		return
 	_war_music = want
 	Sfx.play_music("res://assets/music/war_theme.ogg" if want else "res://assets/music/peace_theme.ogg", -7.0 if want else -6.0)
+
+
+# ---------------- tribes and pacts ----------------
+## Free tribes camp off the road. Gifts and good deeds near their camp win their trust;
+## Afrasiab courts them too. At full trust they swear a pact, send warriors now and
+## then, and ask a little gold in return.
+func _setup_tribes() -> void:
+	for i in Defs.CAMP_CELLS.size():
+		var td: Dictionary = Defs.TRIBES[i % Defs.TRIBES.size()]
+		var c: Vector2i = Defs.CAMP_CELLS[i] - Vector2i(1, 1)
+		if not _footprint_free(c, 3):
+			# a lake or a wood on this map: pitch the tents on the nearest dry clearing
+			var best := c
+			var bd := INF
+			for dj in range(-10, 11):
+				for di in range(-10, 11):
+					var o := c + Vector2i(di, dj)
+					if Vector2(di, dj).length() < bd and _footprint_free(o, 3):
+						bd = Vector2(di, dj).length()
+						best = o
+			c = best
+		var b := _add_building("camp", -1, c)
+		b.title = td.n
+		tribes.append({"b": b, "n": td.n, "units": td.units, "trust": [0.0, 0.0],
+			"send_t": Defs.TRIBE_SEND_EVERY * 0.6, "tribute_t": 0.0, "men": []})
+
+
+func tribe_of(b: Building) -> Dictionary:
+	for t: Dictionary in tribes:
+		if t.b == b:
+			return t
+	return {}
+
+
+func _rival_rate() -> float:
+	return float(Defs.DIFFICULTY[App.difficulty].get("rival", 0.2))
+
+
+func _tribe_trust(t: Dictionary, side: int, amt: float, why := "") -> void:
+	var before: float = t.trust[side]
+	var cap := 100.0 if t.b.ally in [-1, side] else Defs.TRIBE_PACT - 1.0
+	t.trust[side] = clampf(before + amt, 0.0, cap)
+	if side == IRAN and amt > 0.0 and why != "":
+		add_float(t.b.position + Vector3(0, 4.5, 0), "+%s اعتماد · %s" % [Defs.fa(int(round(amt))), why], Color("#9fe8c8"))
+
+
+func gift_tribe(b: Building) -> void:
+	var t := tribe_of(b)
+	if t.is_empty() or not afford(IRAN, Defs.TRIBE_GIFT):
+		return
+	pay(IRAN, Defs.TRIBE_GIFT)
+	Sfx.play("build")
+	# a gift also cools their friendship with Afrasiab
+	_tribe_trust(t, TURAN, -25.0 if b.ally == TURAN else -10.0)
+	_tribe_trust(t, IRAN, Defs.TRIBE_GIFT_TRUST, "هدیه")
+	say("هدیه‌ی ایران به %s رسید." % t.n, IRAN)
+
+
+func _tribe_deed(u: Unit, killer: Node3D) -> void:
+	if killer == null or not is_instance_valid(killer) or not ("side" in killer):
+		return
+	for t: Dictionary in tribes:
+		if _flat(t.b.position, u.position) > Defs.TRIBE_DEED_RADIUS:
+			continue
+		if killer.side == IRAN and u.side in [TURAN, DIVS] and u.tribe == "":
+			_tribe_trust(t, IRAN, Defs.TRIBE_DEED_TRUST, "دلاوری")
+		elif killer.side == TURAN and u.side == IRAN and u.tribe == "":
+			_tribe_trust(t, TURAN, Defs.TRIBE_DEED_TRUST * 0.6)
+
+
+var _tribe_tick := 0.0
+
+
+func _tribes_tick(dt: float) -> void:
+	_tribe_tick += dt
+	if _tribe_tick < 1.0:
+		return
+	var step := _tribe_tick
+	_tribe_tick = 0.0
+	for t: Dictionary in tribes:
+		var b: Building = t.b
+		t.men = t.men.filter(func(m): return is_instance_valid(m) and not m.dead)
+		# Afrasiab's envoys
+		if time > Defs.TRIBE_RIVAL_START and b.ally != IRAN:
+			_tribe_trust(t, TURAN, _rival_rate() * step)
+		elif b.ally == IRAN:
+			_tribe_trust(t, TURAN, _rival_rate() * 0.3 * step)
+		match b.ally:
+			-1:
+				for s in [IRAN, TURAN]:
+					if t.trust[s] >= Defs.TRIBE_PACT:
+						_make_pact(t, s)
+						break
+			IRAN:
+				t.tribute_t += step
+				if t.tribute_t >= Defs.TRIBE_TRIBUTE_EVERY:
+					t.tribute_t = 0.0
+					if res[IRAN].gold >= Defs.TRIBE_TRIBUTE:
+						res[IRAN].gold -= Defs.TRIBE_TRIBUTE
+						add_float(b.position + Vector3(0, 4.5, 0), "−%s طلا · سهم پیمان" % Defs.fa(Defs.TRIBE_TRIBUTE), Color("#ffd766"))
+					else:
+						_tribe_trust(t, IRAN, -35.0)
+						say("%s سهم پیمان را نگرفتند و دلخورند!" % t.n, TURAN)
+				# Afrasiab can lure them away when their trust in Iran runs low
+				if t.trust[IRAN] < Defs.TRIBE_BREAK or t.trust[TURAN] > t.trust[IRAN] + 30.0:
+					_break_pact(t)
+			TURAN:
+				if t.trust[TURAN] < Defs.TRIBE_BREAK:
+					_break_pact(t)
+		# allied warriors
+		if b.ally >= 0:
+			t.send_t += step
+			if t.send_t >= Defs.TRIBE_SEND_EVERY and t.men.size() < Defs.TRIBE_MAX_MEN:
+				t.send_t = 0.0
+				_send_warriors(t)
+
+
+func _make_pact(t: Dictionary, s: int) -> void:
+	var b: Building = t.b
+	b.set_ally(s)
+	t.trust[1 - s] = minf(t.trust[1 - s], 40.0)
+	t.send_t = Defs.TRIBE_SEND_EVERY - 4.0
+	t.tribute_t = 0.0
+	if s == IRAN:
+		say("%s با ایران پیمان بستند! به‌زودی جنگجو می‌فرستند." % t.n, IRAN)
+	else:
+		say("%s با افراسیاب پیمان بستند! با هدیه دلشان را برگردان." % t.n, TURAN)
+	_ping(b.position, Defs.faction_color[s])
+	Sfx.play("horn", -4.0)
+	if selected_building == b:
+		selection_changed.emit()
+
+
+func _break_pact(t: Dictionary) -> void:
+	var b: Building = t.b
+	var was: int = b.ally
+	b.set_ally(-1)
+	# their warriors go home
+	for m: Unit in t.men:
+		if is_instance_valid(m) and not m.dead:
+			spawn_dust(m.position, 1.0)
+			units.erase(m)
+			selected.erase(m)
+			m.queue_free()
+	t.men = []
+	if was == IRAN:
+		say("%s پیمان با ایران را شکستند!" % t.n, TURAN)
+	else:
+		say("%s پیمان با توران را شکستند!" % t.n, IRAN)
+	if selected_building == b:
+		selection_changed.emit()
+	selection_changed.emit()
+
+
+func _send_warriors(t: Dictionary) -> void:
+	var b: Building = t.b
+	var s: int = b.ally
+	for k in Defs.TRIBE_SEND:
+		var kind: String = t.units[(t.men.size() + k) % t.units.size()]
+		var u := spawn_unit(kind, s, free_spot_near(b))
+		u.tribe = t.n
+		t.men.append(u)
+		if s == IRAN and keeps[IRAN]:
+			u.order_move(_open_spot(keeps[IRAN].position + Vector3(randf_range(5, 9), 0, randf_range(-9, -5))))
+	if s == IRAN:
+		say("%s %s جنگجو به یاری ایران فرستادند." % [t.n, Defs.fa(Defs.TRIBE_SEND)], IRAN)

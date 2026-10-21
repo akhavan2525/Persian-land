@@ -31,6 +31,8 @@ var biome := "meadow"
 var _water_mat: ShaderMaterial
 var _far_mat: StandardMaterial3D
 var _leaf_mats: Array = []
+var _bare_mats: Array = []      # leaves of the plane trees, which fall in winter
+var _bark_mats: Array = []
 var _grass_mat: StandardMaterial3D
 
 
@@ -89,7 +91,7 @@ func _gen_layout(layout_seed: int) -> void:
 	for kc in Defs.KEEP_CELL:
 		keeps.append(cell_center_flat(kc))
 	var vills := []
-	for vc in Defs.VILLAGE_CELLS:
+	for vc in Defs.VILLAGE_CELLS + Defs.CAMP_CELLS:
 		vills.append(cell_center_flat(vc))
 	var segs := []
 	for seg in _road_lines():
@@ -146,7 +148,7 @@ func _raw_height(x: float, z: float) -> float:
 		var d := Vector2(x - c.x, z - c.z).length()
 		var f := clampf((d - 16.0) / 10.0, 0.0, 1.0)
 		h = lerpf(0.35, h, f)
-	for vc in Defs.VILLAGE_CELLS:
+	for vc in Defs.VILLAGE_CELLS + Defs.CAMP_CELLS:
 		var c := cell_center_flat(vc)
 		var d := Vector2(x - c.x, z - c.z).length()
 		h = lerpf(0.3, h, clampf((d - 6.0) / 6.0, 0.0, 1.0))
@@ -256,7 +258,7 @@ func _classify() -> void:
 	# keep castle and village grounds clear
 	for kc in Defs.KEEP_CELL:
 		_clear_area(kc, 7)
-	for vc in Defs.VILLAGE_CELLS:
+	for vc in Defs.VILLAGE_CELLS + Defs.CAMP_CELLS:
 		_clear_area(vc, 3)
 
 
@@ -327,7 +329,7 @@ func _ground_weights(i: int, j: int, h: float, slope: float) -> Color:
 		var c := cell_center_flat(kc)
 		var d := Vector2(x - c.x, z - c.z).length()
 		dirt = maxf(dirt, clampf((13.0 - d) / 6.0 + (n - 0.5) * 0.8, 0.0, 0.85))
-	for vc in Defs.VILLAGE_CELLS:
+	for vc in Defs.VILLAGE_CELLS + Defs.CAMP_CELLS:
 		var c := cell_center_flat(vc)
 		var d := Vector2(x - c.x, z - c.z).length()
 		dirt = maxf(dirt, clampf((6.5 - d) / 3.0 + (n - 0.5) * 0.8, 0.0, 0.9))
@@ -465,12 +467,16 @@ func _nature_mesh(file: String) -> Mesh:
 			fm.set_shader_parameter("leaf_tint", look().leaf)
 			fm.set_shader_parameter("snow_amt", look().leaf_snow)
 			_leaf_mats.append(fm)
+			if file.begins_with("tree_chenar"):
+				_bare_mats.append(fm)
 			mesh.surface_set_material(i, fm)
 		else:
 			var m := StandardMaterial3D.new()
 			m.albedo_texture = tex
 			m.vertex_color_use_as_albedo = true
 			m.roughness = 0.95
+			if file.begins_with("tree"):
+				_bark_mats.append(m)
 			mesh.surface_set_material(i, m)
 	inst.free()
 	return mesh
@@ -508,7 +514,7 @@ func _near_castle_or_road(p: Vector3) -> bool:
 	for kc in Defs.KEEP_CELL:
 		if Vector2(p.x, p.z).distance_to(Vector2(cell_center_flat(kc).x, cell_center_flat(kc).z)) < 17.0:
 			return true
-	for vc in Defs.VILLAGE_CELLS:
+	for vc in Defs.VILLAGE_CELLS + Defs.CAMP_CELLS:
 		if Vector2(p.x, p.z).distance_to(Vector2(cell_center_flat(vc).x, cell_center_flat(vc).z)) < 8.0:
 			return true
 	return false
@@ -615,6 +621,15 @@ func set_winter(k: float) -> void:
 	for fm: ShaderMaterial in _leaf_mats:
 		fm.set_shader_parameter("leaf_tint", a.leaf.lerp(b.leaf, k))
 		fm.set_shader_parameter("snow_amt", lerpf(a.leaf_snow, b.leaf_snow, k))
+	# the plane trees drop their leaves and stand dry; cypresses stay green under snow
+	for fm: ShaderMaterial in _bare_mats:
+		fm.set_shader_parameter("bare", 0.72 * clampf(k * 1.4, 0.0, 1.0))
+		fm.set_shader_parameter("snow_amt", lerpf(a.leaf_snow, 0.75, k))
+	for fm: ShaderMaterial in _leaf_mats:
+		if not fm in _bare_mats:
+			fm.set_shader_parameter("snow_amt", lerpf(a.leaf_snow, 0.6, k))
+	for m: StandardMaterial3D in _bark_mats:
+		m.albedo_color = Color.WHITE.lerp(Color(1.25, 1.28, 1.35), k)
 	if _water_mat:
 		_water_mat.set_shader_parameter("ice", lerpf(a.ice, 0.85, clampf(k * 1.3 - 0.3, 0.0, 1.0)))
 	if _far_mat:

@@ -24,6 +24,8 @@ var capturing := -1
 var selected := false
 var _rise := 1.0
 var last_hit_t := -100.0
+var ally := -1                 # camp: the side its tribe is pledged to
+var title := ""                # camp: the tribe's name
 
 
 func setup(w: Node, t: String, s: int, c: Vector2i, lvl := 1, instant := true) -> void:
@@ -72,7 +74,7 @@ func half_extent() -> float:
 
 
 func blocks(for_side: int) -> bool:
-	if type == "village" or type == "farm":
+	if type in ["village", "farm", "camp"]:
 		return false
 	if type == "gate" and for_side == side:
 		return false
@@ -81,6 +83,8 @@ func blocks(for_side: int) -> bool:
 
 func display_name() -> String:
 	var n: String = Defs.BUILDINGS[type].n
+	if title != "":
+		return title
 	if type == "keep":
 		n = "دژ %s" % Defs.FACTIONS[side].n if side >= 0 else n
 	return n
@@ -89,7 +93,7 @@ func display_name() -> String:
 func _rebuild_model() -> void:
 	if model:
 		model.queue_free()
-	model = Models.make_building(type, side, level)
+	model = Models.make_building(type, ally if type == "camp" else side, level)
 	add_child(model)
 	if marks:
 		marks.queue_free()
@@ -100,6 +104,11 @@ func _rebuild_model() -> void:
 		model.rotation.y = 0.0
 	elif type != "keep":
 		model.rotation.y = [0.0, PI * 0.5, PI, PI * 1.5][(cell.x * 7 + cell.y * 3) % 4] if type in ["house", "woodcutter", "quarry"] else 0.0
+
+
+func set_ally(s: int) -> void:
+	ally = s
+	_rebuild_model()
 
 
 func set_side(s: int) -> void:
@@ -139,7 +148,7 @@ func set_selected(v: bool) -> void:
 
 
 func take_damage(amount: float, attacker: Node3D) -> void:
-	if dead or type == "village":
+	if dead or type in ["village", "camp"]:
 		return
 	hp -= amount
 	last_hit_t = Time.get_ticks_msec() / 1000.0
@@ -196,7 +205,7 @@ func tick(dt: float) -> void:
 
 ## Fire and smoke on a badly damaged building.
 func _update_fire() -> void:
-	var want := not dead and type != "village" and hp < max_hp * 0.45
+	var want := not dead and type not in ["village", "camp"] and hp < max_hp * 0.45
 	if want == (fire != null):
 		return
 	if not want:

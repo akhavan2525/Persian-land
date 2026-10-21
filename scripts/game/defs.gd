@@ -22,6 +22,8 @@ static var faction_dark: Array[Color] = [Color("#16357f"), Color("#5e1612"), Col
 ## Castle positions in cells.
 const KEEP_CELL := [Vector2i(16, 62), Vector2i(62, 16)]
 const VILLAGE_CELLS := [Vector2i(22, 30), Vector2i(40, 40), Vector2i(57, 49)]
+## Tribe camps off the main road: the first nearer Turan, the second nearer Iran.
+const CAMP_CELLS := [Vector2i(32, 17), Vector2i(48, 62)]
 
 # ---------------- resources ----------------
 const RES_ORDER := ["wood", "stone", "food", "gold"]
@@ -49,6 +51,8 @@ const BUILDINGS := {
 		"desc": "با دو ضربه روی زمین، از نقطه‌ی اول تا دوم دیوار بکش."},
 	"gate": {"n": "دروازه", "size": 1, "hp": 800, "cost": {"stone": 20, "wood": 10}, "pop": 0,
 		"desc": "سپاه خودی از آن می‌گذرد و دشمن نه."},
+	"camp": {"n": "اردوی قبیله", "size": 3, "hp": 99999, "cost": {}, "pop": 0,
+		"desc": "قبیله‌ای آزاد. با هدیه و کار نیک اعتمادشان را بخر تا هم‌پیمانت شوند. افراسیاب هم در پی آن‌هاست!"},
 	"village": {"n": "روستا", "size": 3, "hp": 99999, "cost": {}, "pop": 0,
 		"desc": "سپاهت را کنارش ببر تا تصرف شود. سرزمین و درآمدت را بیشتر می‌کند."},
 }
@@ -168,13 +172,33 @@ const FOOD_EVERY := 10.0        # everyone eats
 const FOOD_PER_10 := 0.5        # food per person per FOOD_EVERY seconds
 const CAPTURE_TIME := 6.0
 
+# ---------------- tribes and pacts ----------------
+const TRIBES := [
+	{"n": "سکاهای دشت", "units": ["cav", "archer"]},
+	{"n": "کوه‌نشینان", "units": ["spear", "spear", "archer"]},
+]
+const TRIBE_GIFT := {"gold": 40, "food": 30}
+const TRIBE_GIFT_TRUST := 30.0
+const TRIBE_DEED_TRUST := 5.0       # each Turan soldier or div slain near the camp
+const TRIBE_DEED_RADIUS := 24.0
+const TRIBE_FREE_TRUST := 25.0      # a nearby village freed from the divs
+const TRIBE_PACT := 100.0           # trust needed for a pact
+const TRIBE_BREAK := 50.0           # a pact breaks below this trust
+const TRIBE_RIVAL_START := 150.0    # Afrasiab sends envoys from this time on
+const TRIBE_SEND_EVERY := 75.0      # an allied tribe sends warriors this often
+const TRIBE_SEND := 2
+const TRIBE_MAX_MEN := 6
+const TRIBE_TRIBUTE_EVERY := 120.0  # and asks this much gold in return
+const TRIBE_TRIBUTE := 15
+
 # ---------------- difficulty ----------------
 const DIFFICULTY := {
 	# time to gather an army between waves; Turan trains about as fast as the player can.
+	# rival: how fast Afrasiab wins the tribes over (trust per second)
 	# match: Turan income slows while its army is this much larger than Iran's (0 = never)
-	"easy": {"n": "آسان", "first": 300.0, "every": 280.0, "base": 2, "grow": 0.9, "income": 0.6, "raid": 150.0, "match": 3},
-	"normal": {"n": "معمولی", "first": 240.0, "every": 230.0, "base": 3, "grow": 1.2, "income": 0.75, "raid": 120.0, "match": 6},
-	"hard": {"n": "سخت", "first": 150.0, "every": 150.0, "base": 5, "grow": 1.8, "income": 1.1, "raid": 90.0, "match": 0},
+	"easy": {"n": "آسان", "first": 300.0, "every": 280.0, "base": 2, "grow": 0.9, "income": 0.6, "raid": 150.0, "match": 3, "rival": 0.12},
+	"normal": {"n": "معمولی", "first": 240.0, "every": 230.0, "base": 3, "grow": 1.2, "income": 0.75, "raid": 120.0, "match": 6, "rival": 0.2},
+	"hard": {"n": "سخت", "first": 150.0, "every": 150.0, "base": 5, "grow": 1.8, "income": 1.1, "raid": 90.0, "match": 0, "rival": 0.35},
 }
 
 

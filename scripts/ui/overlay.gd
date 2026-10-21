@@ -43,6 +43,8 @@ func _draw() -> void:
 	for b: Building in world.buildings:
 		if b.dead:
 			continue
+		if b.type == "camp":
+			continue
 		if b.type == "village":
 			if b.capturing >= 0:
 				var wp: Vector3 = b.position + Vector3(0, 5.5, 0)
