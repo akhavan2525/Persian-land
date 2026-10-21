@@ -333,9 +333,19 @@ func _simorgh_flight() -> void:
 	var to := c + right * 42.0 + up_screen * 6.0 + Vector3(0, 8, 0)
 	bird.position = from
 	bird.look_at_from_position(from, to, Vector3.UP)
+	var fly_dir := (to - from).normalized()
+	var alt := [from.y]
 	var tw := bird.create_tween()
 	tw.tween_method(func(k: float):
-		bird.position = from.lerp(to, k) + Vector3(0, sin(k * PI) * 3.0, 0)
+		var p := from.lerp(to, k) + Vector3(0, sin(k * PI) * 3.0, 0)
+		# never pass through rocks, hills or buildings: climb over whatever is below or just ahead
+		var want := p.y
+		for ahead in [0.0, 5.0, 10.0]:
+			var q: Vector3 = p + fly_dir * ahead
+			want = maxf(want, _clearance_at(q))
+		alt[0] = lerpf(alt[0], want, 0.12) if want < alt[0] else maxf(alt[0], lerpf(alt[0], want, 0.35))
+		p.y = alt[0]
+		bird.position = p
 		# a slow, mighty beat: quick down stroke, gentle glide between beats
 		var beat := sin(k * 34.0)
 		if flap_mat:
@@ -344,6 +354,24 @@ func _simorgh_flight() -> void:
 		for w in wings:
 			w[0].rotation.z = beat * 0.45 * w[1], 0.0, 1.0, 6.5)
 	tw.tween_callback(bird.queue_free)
+
+
+## Lowest safe height for the Simorgh over a point: the ground (rocks, hills) and any
+## building close by, with room for its wings.
+func _clearance_at(q: Vector3) -> float:
+	var y: float = world.terrain.height_at(q.x, q.z) + 5.0
+	for b: Building in world.buildings:
+		if b.dead:
+			continue
+		var r: float = b.half_extent() + 6.0
+		if absf(b.position.x - q.x) < r and absf(b.position.z - q.z) < r:
+			var h := 5.0
+			if b.type == "keep":
+				h = 10.5 + b.level * 1.5
+			elif b.type == "tower":
+				h = 8.5
+			y = maxf(y, b.position.y + h + 3.5)
+	return y
 
 
 func _simorgh_model() -> Node3D:
