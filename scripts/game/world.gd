@@ -81,7 +81,7 @@ func _ready() -> void:
 	if OS.get_cmdline_user_args().has("--pathtest") or OS.get_cmdline_user_args().has("--wavetest") or OS.get_cmdline_user_args().has("--chaintest"):
 		map_seed = 4242     # same map every test run
 	# the first stage keeps its hand-made map; the others get a layout of their own
-	terrain.build(map_seed, biome, 0 if App.stage == 0 else int(stage.seed))
+	terrain.build(map_seed, biome, 0 if App.stage == 0 else int(stage.seed), {"river": stage.get("river", false), "peaks": stage.get("peaks", 0)})
 	_setup_grids()
 	rig = CameraRig.new()
 	rig.name = "CameraRig"

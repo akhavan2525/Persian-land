@@ -41,10 +41,18 @@ var _snow_mmis: Array = []       # the same trees bare and snowy (built when the
 
 ## Builds the land. The first stage keeps its hand-made layout; later stages scatter
 ## lakes, woods and rocks from the seed in amounts that suit their biome.
-func build(seed_value: int, biome_name := "meadow", layout_seed := 0) -> void:
+## extras: "river" (a river crossing the map, fordable where the roads cross it) and
+## "peaks" (how many tall mountains rise inside the map).
+func build(seed_value: int, biome_name := "meadow", layout_seed := 0, extras := {}) -> void:
 	biome = biome_name
 	if layout_seed != 0:
 		_gen_layout(layout_seed)
+	if extras.get("river", false):
+		_river = RIVER_PATH.duplicate()
+		# the river is the water of this land: only small ponds besides it
+		_lakes = _lakes.filter(func(l): return l.z < 8.0 and _river_dist(l.x, l.y) > l.z * 1.6 + 10.0)
+	if int(extras.get("peaks", 0)) > 0:
+		_gen_peaks(int(extras.peaks), layout_seed + 17)
 	rng.seed = seed_value
 	noise.seed = seed_value
 	noise.frequency = 0.018
@@ -59,6 +67,45 @@ func build(seed_value: int, biome_name := "meadow", layout_seed := 0) -> void:
 	_build_far_ground()
 	_scatter_trees()
 	_scatter_rocks()
+
+
+# ---------------- river and mountains ----------------
+## A river from the northern mountains to the east, between the middle village and
+## Afrasiab's side. Points are (x, z) in metres.
+const RIVER_PATH := [Vector2(-62, -92), Vector2(-52, -60), Vector2(-30, -38), Vector2(-14, -22),
+	Vector2(8, -16), Vector2(28, -14), Vector2(52, -4), Vector2(70, 8), Vector2(95, 14)]
+const RIVER_HALF_WIDTH := 4.2
+var _river: Array = []
+var _peaks: Array = []     # (x, z, radius)
+
+
+func _river_dist(x: float, z: float) -> float:
+	var best := INF
+	var p := Vector3(x, 0, z)
+	for i in _river.size() - 1:
+		var a: Vector2 = _river[i]
+		var b: Vector2 = _river[i + 1]
+		best = minf(best, _dist_to_segment(p, Vector3(a.x, 0, a.y), Vector3(b.x, 0, b.y)))
+	return best
+
+
+## Tall peaks away from the castles, villages and roads; they block the way, so armies
+## must go round through the passes.
+func _gen_peaks(count: int, peak_seed: int) -> void:
+	var r := RandomNumberGenerator.new()
+	r.seed = peak_seed
+	var keeps := []
+	for kc in Defs.KEEP_CELL:
+		keeps.append(cell_center_flat(kc))
+	var vills := []
+	for vc in Defs.VILLAGE_CELLS + Defs.CAMP_CELLS:
+		vills.append(cell_center_flat(vc))
+	var segs := []
+	for seg in _road_lines():
+		segs.append([cell_center_flat(seg[0]), cell_center_flat(seg[1])])
+	_peaks = _scatter_blobs(r, [count, 7.0, 11.0], keeps, vills, segs, 1.5, 3.0)
+	# no lakes or woods where the peaks rise
+	_lakes = _lakes.filter(func(l): return _peaks.all(func(pk): return Vector2(l.x - pk.x, l.y - pk.y).length() > l.z + pk.z * 1.4))
 
 
 # ---------------- stage layouts ----------------
@@ -166,6 +213,26 @@ func _raw_height(x: float, z: float) -> float:
 		var d := Vector2(x - r.x, z - r.y).length()
 		if d < r.z * 1.8:
 			h += (1.0 - d / (r.z * 1.8)) * 1.4 * keep_dry
+	for pk in _peaks:
+		var d := Vector2(x - pk.x, z - pk.y).length()
+		if d < pk.z * 1.5:
+			var k: float = 1.0 - d / (pk.z * 1.5)
+			# a rough cone with ridges
+			h += (smoothstep(0.0, 1.0, k) * 15.0 + k * k * 4.0 + k * noise.get_noise_2d(x * 4.0, z * 4.0) * 3.5) * keep_dry
+	if not _river.is_empty():
+		var d := _river_dist(x, z)
+		var w := RIVER_HALF_WIDTH + noise.get_noise_2d(x * 2.0, z * 2.0) * 1.2
+		if d < w * 2.2:
+			var k := 1.0 - clampf((d - w * 0.55) / (w * 1.65), 0.0, 1.0)
+			# the river keeps clear of the castles, villages and camps, and fords at the roads
+			var guard := 1.0
+			for kc in Defs.KEEP_CELL:
+				var c := cell_center_flat(kc)
+				guard = minf(guard, clampf((Vector2(x - c.x, z - c.z).length() - 22.0) / 8.0, 0.0, 1.0))
+			for vc in Defs.VILLAGE_CELLS + Defs.CAMP_CELLS:
+				var c := cell_center_flat(vc)
+				guard = minf(guard, clampf((Vector2(x - c.x, z - c.z).length() - 9.0) / 5.0, 0.0, 1.0))
+			h -= smoothstep(0.0, 1.0, k) * 3.4 * guard * keep_dry
 	return h
 
 
@@ -591,7 +658,8 @@ func _scatter_rocks() -> void:
 	for j in G:
 		for i in G:
 			var t := cell_type[j * G + i]
-			if t != ROCK and not (t == MOUNTAIN and rng.randf() < 0.12):
+			var on_peak := t == MOUNTAIN and _in_blob(cell_center(Vector2i(i, j)), _peaks, 1.5) > 0.0
+			if t != ROCK and not (t == MOUNTAIN and rng.randf() < (0.4 if on_peak else 0.12)):
 				continue
 			var base := cell_center(Vector2i(i, j))
 			for _k in (2 if t == ROCK else 1):
