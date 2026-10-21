@@ -7,12 +7,12 @@ config_version=5
 
 config/name="سرزمین پارسیان"
 config/description="نبرد ایران و توران، از روزگار شاهنامه"
-config/version="0.7"
+config/version="0.7.1"
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.3", "Mobile")
 boot_splash/bg_color=Color(0.051, 0.094, 0.2, 1)
 boot_splash/show_image=false
-config/icon="res://icon.svg"
+config/icon="res://assets/images/app_icon_256.png"
 
 [autoload]
 
