@@ -59,6 +59,10 @@ func _ready() -> void:
 			var wi = load("res://scripts/dev/wintershot.gd").new()
 			wi.out = a.substr(13)
 			add_child(wi)
+		if a.begins_with("--stormshot="):
+			var so2 = load("res://scripts/dev/stormshot.gd").new()
+			so2.out = a.substr(12)
+			add_child(so2)
 		if a.begins_with("--tribeshot="):
 			var tr = load("res://scripts/dev/tribeshot.gd").new()
 			tr.out = a.substr(12)

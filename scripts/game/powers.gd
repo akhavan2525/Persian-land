@@ -230,7 +230,12 @@ func _lightning(p: Vector3) -> void:
 		get_tree().create_timer(i * 0.32).timeout.connect(_bolt.bind(_ground(at)))
 
 
-func _bolt(g: Vector3) -> void:
+## A harmless bolt for the storm in the sky (no damage, no burning).
+func storm_bolt(g: Vector3) -> void:
+	_bolt(g, false)
+
+
+func _bolt(g: Vector3, harm := true) -> void:
 	if not is_instance_valid(world):
 		return
 	var root := Node3D.new()
@@ -258,6 +263,16 @@ func _bolt(g: Vector3) -> void:
 	_flash(g + Vector3(0, 4, 0), Color("#cfe3ff"), 14.0, 24.0, 0.35)
 	world.spawn_burst(g + Vector3(0, 0.5, 0), Color("#cfe3ff"), 24, 0.12, 7.0, 0.5, true)
 	_ring(g, 2.8, Color("#cfe3ff"), 0.6)
+	if not harm:
+		Sfx.play_at("thunder", g, 2.0)
+		var tw0 := root.create_tween()
+		tw0.tween_interval(0.12)
+		tw0.tween_callback(func(): root.visible = false)
+		tw0.tween_interval(0.06)
+		tw0.tween_callback(func(): root.visible = true)
+		tw0.tween_interval(0.1)
+		tw0.tween_callback(root.queue_free)
+		return
 	var scorch := FX.flames(Vector3(0.8, 0.1, 0.8), 30, 1.0)
 	scorch.position = g
 	scorch.one_shot = true

@@ -109,6 +109,8 @@ func _ready() -> void:
 	rig.zoom_by(1.0)
 	if biome == "snow":
 		_add_snowfall()
+	if stage.get("storm", false):
+		_start_storm()
 	say("مرحله‌ی %s: %s" % [Defs.fa(App.stage + 1), stage.n], IRAN)
 	say("افراسیاب از جیحون گذشته است. دژ را استوار کن و سپاه گرد آور!" if App.stage == 0 else "دژ را استوار کن و سپاه گرد آور. افراسیاب آماده‌ی یورش است!", TURAN)
 
@@ -119,12 +121,13 @@ const SKIES := {
 	"steppe": {"top": "#5a86c0", "horizon": "#efd5a0", "ground": "#e0c590", "fog": "#e6cf9e", "fog_d": 0.0019, "sun": "#ffd9a0", "sun_e": 1.6, "amb": 0.6, "sat": 1.12},
 	"forest": {"top": "#56789e", "horizon": "#c9d3bc", "ground": "#a6b096", "fog": "#b9c6ad", "fog_d": 0.0032, "sun": "#ffe9c8", "sun_e": 1.35, "amb": 0.65, "sat": 1.05},
 	"snow": {"top": "#6f8fbd", "horizon": "#dce3ec", "ground": "#d5dce6", "fog": "#d3dbe6", "fog_d": 0.0026, "sun": "#e8eeff", "sun_e": 1.1, "amb": 0.62, "sat": 0.98},
+	"storm": {"top": "#3e4858", "horizon": "#8a9098", "ground": "#7f8478", "fog": "#868d95", "fog_d": 0.0042, "sun": "#c6d0de", "sun_e": 0.75, "amb": 0.5, "sat": 0.82},
 	"desert": {"top": "#4a82cc", "horizon": "#f3d9a8", "ground": "#e9cc94", "fog": "#ead3a3", "fog_d": 0.0022, "sun": "#fff0cc", "sun_e": 1.75, "amb": 0.6, "sat": 1.1},
 }
 
 
 func _setup_environment() -> void:
-	var sk: Dictionary = SKIES.get(biome, SKIES.meadow)
+	var sk: Dictionary = SKIES.storm if stage.get("storm", false) else SKIES.get(biome, SKIES.meadow)
 	var env := Environment.new()
 	_env = env
 	env.background_mode = Environment.BG_SKY
@@ -843,6 +846,7 @@ func _physics_process(dt: float) -> void:
 	_economy(dt)
 	_villages_tick(dt)
 	_tribes_tick(dt)
+	_storm_tick(dt)
 	for b: Building in buildings.duplicate():
 		b.tick(dt)
 	for u: Unit in units.duplicate():
@@ -1969,3 +1973,69 @@ func _send_warriors(t: Dictionary) -> void:
 			u.order_move(_open_spot(keeps[IRAN].position + Vector3(randf_range(5, 9), 0, randf_range(-9, -5))))
 	if s == IRAN:
 		say("%s %s جنگجو به یاری ایران فرستادند." % [t.n, Defs.fa(Defs.TRIBE_SEND)], IRAN)
+
+
+# ---------------- storm ----------------
+## Rain that follows the camera, the patter of it, and lightning now and then far off.
+var _storm := false
+var _storm_t := 6.0
+
+
+func _start_storm() -> void:
+	_storm = true
+	var p := CPUParticles3D.new()
+	p.name = "Rain"
+	p.amount = 1200
+	p.lifetime = 1.1
+	p.preprocess = 1.1
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(42, 1, 34)
+	p.direction = Vector3(0.12, -1, 0.05)
+	p.spread = 3.0
+	p.gravity = Vector3(0, -9.0, 0)
+	p.initial_velocity_min = 22.0
+	p.initial_velocity_max = 27.0
+	p.particle_flag_align_y = true
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var drop := BoxMesh.new()
+	drop.size = Vector3(0.04, 1.3, 0.04)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.82, 0.87, 0.97, 0.55)
+	drop.material = m
+	p.mesh = drop
+	p.position = Vector3(0, 20, 0)
+	p.local_coords = false
+	rig.add_child(p)
+	var amb := AudioStreamPlayer.new()
+	amb.name = "RainSound"
+	var st: AudioStream = load("res://assets/music/rain_loop.ogg")
+	if st is AudioStreamOggVorbis:
+		(st as AudioStreamOggVorbis).loop = true
+	amb.stream = st
+	amb.volume_db = -9.0
+	add_child(amb)
+	amb.play()
+	say("آسمان خاوران توفانی است. باران می‌بارد و آذرخش می‌درخشد.", IRAN)
+
+
+func _storm_tick(dt: float) -> void:
+	if not _storm:
+		return
+	_storm_t -= dt
+	if _storm_t > 0.0:
+		return
+	_storm_t = randf_range(9.0, 22.0)
+	# a bolt somewhere in view, off to the side of the camera; it hurts no one
+	var a := randf() * TAU
+	var g: Vector3 = rig.position + Vector3(cos(a), 0, sin(a)) * randf_range(18.0, 34.0)
+	g.y = terrain.height_at(g.x, g.z)
+	powers.storm_bolt(g)
+	# the sky lights up for an instant
+	var e0: float = sun.light_energy
+	var tw := create_tween()
+	tw.tween_property(sun, "light_energy", e0 + 2.2, 0.05)
+	tw.tween_property(sun, "light_energy", e0 + 0.4, 0.08)
+	tw.tween_property(sun, "light_energy", e0 + 1.6, 0.05)
+	tw.tween_property(sun, "light_energy", e0, 0.35)
