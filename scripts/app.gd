@@ -59,6 +59,10 @@ func _ready() -> void:
 			var wi = load("res://scripts/dev/wintershot.gd").new()
 			wi.out = a.substr(13)
 			add_child(wi)
+		if a.begins_with("--rankshot="):
+			var rk = load("res://scripts/dev/rankshot.gd").new()
+			rk.out = a.substr(11)
+			add_child(rk)
 		if a.begins_with("--mapshot="):
 			var mp = load("res://scripts/dev/mapshot.gd").new()
 			mp.out = a.substr(10)

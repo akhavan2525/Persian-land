@@ -108,6 +108,36 @@ func setup(w: Node, t: String, o: int, pos: Vector3) -> void:
 		state = State.GUARD
 
 
+## Rank from the barracks level (1-4): more life and damage, bronze then golden armour.
+var rank := 1
+
+
+func set_rank(r: int) -> void:
+	r = clampi(r, 1, Defs.RANK_BONUS.size())
+	if r == rank or dead:
+		return
+	rank = r
+	var bonus: float = Defs.RANK_BONUS[r - 1]
+	var ratio := hp / max_hp
+	max_hp = def.hp * (1.0 + bonus)
+	hp = max_hp * ratio
+	dmg_mult = 1.0 + bonus
+	var tint: Color = Defs.RANK_TINT[r - 1]
+	var over: StandardMaterial3D = null
+	if tint.a > 0.0:
+		over = StandardMaterial3D.new()
+		over.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		over.albedo_color = tint
+		over.metallic = 0.85
+		over.roughness = 0.3
+		if r >= 4:
+			over.emission_enabled = true
+			over.emission = Color(1.0, 0.75, 0.25)
+			over.emission_energy_multiplier = 0.25
+	for mi in model.find_children("*", "GeometryInstance3D", true, false):
+		(mi as GeometryInstance3D).material_overlay = over
+
+
 ## Troops from a fully upgraded barracks.
 func make_veteran() -> void:
 	max_hp *= 1.0 + Defs.VETERAN_BONUS

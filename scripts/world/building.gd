@@ -23,6 +23,7 @@ var capture := {0: 0.0, 1: 0.0}
 var capturing := -1
 var selected := false
 var _rise := 1.0
+var _base_scale := Vector3.ONE
 var last_hit_t := -100.0
 var turn := 0                  # gate: 1 = turned a quarter
 var ally := -1                 # camp: the side its tribe is pledged to
@@ -101,6 +102,11 @@ func _rebuild_model() -> void:
 	marks = Models.level_marks(type, side, level)
 	marks.position.y = 0.05
 	add_child(marks)
+	if type == "tower":
+		# each level raises the tower a little higher, banners and all
+		_base_scale = Vector3(1.0 + (level - 1) * 0.05, 1.0 + (level - 1) * 0.13, 1.0 + (level - 1) * 0.05)
+		model.scale = _base_scale
+		marks.scale = _base_scale
 	if type in ["wall", "gate"]:
 		model.rotation.y = PI * 0.5 * turn if type == "gate" else 0.0
 	elif type != "keep":
@@ -189,8 +195,8 @@ func tick(dt: float) -> void:
 			var t: String = queue.pop_front()
 			train_t = 0.0
 			var u: Unit = world.spawn_unit(t, side, world.free_spot_near(self))
-			if level >= 4:
-				u.make_veteran()
+			if level >= 4 and side != Defs.IRAN:
+				u.make_veteran()    # Iran's soldiers grow stronger through their rank instead
 			if side == Defs.IRAN:
 				Sfx.voice("trained")
 	var arrow = null
@@ -237,4 +243,4 @@ func _process(delta: float) -> void:
 	if _rise < 1.0:
 		_rise = minf(1.0, _rise + delta / 1.4)
 		var k := ease(_rise, 0.4)
-		model.scale = Vector3(1.0, maxf(0.02, k), 1.0)
+		model.scale = _base_scale * Vector3(1.0, maxf(0.02, k), 1.0)

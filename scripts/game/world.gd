@@ -411,9 +411,27 @@ func spawn_unit(type: String, side: int, pos: Vector3) -> Unit:
 	add_child(u)
 	u.setup(self, type, side, pos)
 	units.append(u)
+	if type in Defs.TRAIN_MENU and side == IRAN:
+		u.set_rank(best_barracks(side))
 	if side == TURAN and ai:
 		ai.on_unit_spawned(u)
 	return u
+
+
+func best_barracks(side: int) -> int:
+	var best := 1
+	for b: Building in buildings:
+		if b.side == side and b.type == "barracks" and not b.dead:
+			best = maxi(best, b.level)
+	return best
+
+
+## Every soldier of a side takes the rank of its best barracks (after an upgrade or a loss).
+func refresh_ranks(side: int) -> void:
+	var r := best_barracks(side)
+	for u: Unit in units:
+		if u.side == side and not u.dead and u.type in Defs.TRAIN_MENU:
+			u.set_rank(r)
 
 
 func free_spot_near(b: Building) -> Vector3:
@@ -1224,6 +1242,9 @@ func upgrade_building(b: Building) -> void:
 	b.upgrade()
 	spawn_dust(b.position, b.size * 1.3)
 	spawn_burst(b.position + Vector3(0, 3.0, 0), Color("#ffd766"), 30, 0.14, 5.0, 1.4, true)
+	if b.type == "barracks":
+		refresh_ranks(IRAN)
+		say("سربازان ایران قوی‌تر شدند و جامه‌ی %s پوشیدند!" % ("مفرغی" if b.level == 2 else "زرین"), IRAN)
 	if b.type == "keep":
 		_update_zones()
 		say("دژ ایران به سطح %s رسید! سرزمین و جمعیت بیشتر شد و ساختمان‌ها می‌توانند بالاتر بروند." % Defs.fa(b.level), IRAN)

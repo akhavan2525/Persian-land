@@ -69,7 +69,7 @@ const KEEP_LEVELS := [
 
 # ---------------- building levels ----------------
 ## Like the town hall in a castle game: no building can be raised above the keep's level.
-const MAX_LEVEL := {"house": 3, "farm": 3, "woodcutter": 3, "quarry": 3, "barracks": 4, "tower": 3, "wall": 3, "gate": 3}
+const MAX_LEVEL := {"house": 3, "farm": 3, "woodcutter": 3, "quarry": 3, "barracks": 4, "tower": 4, "wall": 3, "gate": 3}
 const LEVEL_HP := [1.0, 1.4, 1.9, 2.5, 3.2]
 const LEVEL_PROD := [1.0, 1.6, 2.3]           # resources per delivery
 const LEVEL_HOUSE := [5, 8, 12]               # people per house
@@ -77,6 +77,10 @@ const LEVEL_TRAIN := [1.0, 0.8, 0.65, 0.5]    # barracks training time
 ## What each barracks level teaches, shown on the upgrade button.
 const BARRACKS_UNLOCK := {1: ["spear", "archer"], 2: ["cav"], 3: ["immortal"]}
 const VETERAN_BONUS := 0.15                   # barracks level 4: tougher, harder-hitting troops
+## Soldier rank follows the best barracks: more life and harder blows, and armour that
+## turns bronze, then gold.
+const RANK_BONUS := [0.0, 0.12, 0.25, 0.4]
+const RANK_TINT := [Color(0, 0, 0, 0), Color(0.86, 0.58, 0.32, 0.26), Color(1.0, 0.8, 0.3, 0.34), Color(1.0, 0.86, 0.38, 0.44)]
 
 
 static func upgrade_cost(type: String, next_level: int) -> Dictionary:
@@ -100,11 +104,10 @@ static func upgrade_text(type: String, next_level: int) -> String:
 			var parts: PackedStringArray = ["آموزش تندتر"]
 			for t in BARRACKS_UNLOCK.get(next_level, []):
 				parts.append("سرباز تازه: " + UNITS[t].n)
-			if next_level == 4:
-				parts.append("سربازان کهنه‌کار با جان و ضربه‌ی بیشتر")
+			parts.append("همه‌ی سربازان %s٪ قوی‌تر با جامه‌ی %s" % [fa(int(RANK_BONUS[next_level - 1] * 100)), "مفرغی" if next_level == 2 else "زرین"])
 			return "، ".join(parts)
 		"tower":
-			return "تیر قوی‌تر و بُرد بیشتر"
+			return "برج بلندتر، تیر %s٪ قوی‌تر و بُرد بیشتر" % fa(int((next_level - 1) * 35))
 	return "جان بیشتر"
 
 
