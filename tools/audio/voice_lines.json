@@ -1,180 +1,180 @@
 {
   "voices": {
-    "soldier": "rNb3hdSf0n4ROIbYC8Bl",
-    "rostam": "pNInz6obpgDQGcFmaJgB",
-    "afrasiab": "SOYHLrjzK2X1ezoPC6cr",
-    "herald": "rNb3hdSf0n4ROIbYC8Bl"
+    "soldier": "4D8rX5FMrycxXbF6iW0I",
+    "rostam": "PEdcOLzbXYhL8IKOswXB",
+    "herald": "4Uw730VKF274NsJJmpdv",
+    "afrasiab": "SOYHLrjzK2X1ezoPC6cr"
   },
   "lines": [
     {
       "id": "select_0",
       "voice": "soldier",
-      "text": "بله سرورم، چه فرمان می‌دهی؟"
+      "text": "بَلِه، سَرْوَرَم، چه فَرْمان میْ‌دَهیْ؟"
     },
     {
       "id": "select_1",
       "voice": "soldier",
-      "text": "فرمان بده، سردار!"
+      "text": "فَرْمان بِدِه، سَرْدار!"
     },
     {
       "id": "select_2",
       "voice": "soldier",
-      "text": "آماده‌ایم، سردار."
+      "text": "آمادِه‌ایْم، سَرْدار."
     },
     {
       "id": "select_3",
       "voice": "soldier",
-      "text": "در خدمتیم!"
+      "text": "دَر خِدْمَتیْم!"
     },
     {
       "id": "move_0",
       "voice": "soldier",
-      "text": "به چشم، سرور من!"
+      "text": "بِه چَشْم، سَرْوَرِ مَن!"
     },
     {
       "id": "move_1",
       "voice": "soldier",
-      "text": "روانه‌ایم."
+      "text": "رَوانِه‌ایْم."
     },
     {
       "id": "move_2",
       "voice": "soldier",
-      "text": "همین حالا، سرورم."
+      "text": "هَمیْن حالا، سَرْوَرَم."
     },
     {
       "id": "move_3",
       "voice": "soldier",
-      "text": "فرمان، فرمانِ شماست."
+      "text": "فَرْمان، فَرْمانِ شُماسْت."
     },
     {
       "id": "attack_0",
       "voice": "soldier",
-      "text": "[shouting] به پیش، ای دلیرانِ ایران!"
+      "text": "[shouting] بِه پیْش، اِیْ دَلیْرانِ ایْران!"
     },
     {
       "id": "attack_1",
       "voice": "soldier",
-      "text": "[shouting] برای ایران!"
+      "text": "[shouting] بَرایِ ایْران!"
     },
     {
       "id": "attack_2",
       "voice": "soldier",
-      "text": "[shouting] مرگ بر سپاهِ توران!"
+      "text": "[shouting] مَرْگ بَر سِپاهِ توْران!"
     },
     {
       "id": "attack_3",
       "voice": "soldier",
-      "text": "[shouting] حمله کنید، دلیران!"
+      "text": "[shouting] حَمْلِه کُنیْد، دَلیْران!"
     },
     {
       "id": "hero_select_0",
       "voice": "rostam",
-      "text": "رستمِ دستان، آماده‌ی نبرد!"
+      "text": "رُسْتَمِ دَسْتان، آمادِه‌یِ نَبَرْد!"
     },
     {
       "id": "hero_select_1",
       "voice": "rostam",
-      "text": "گرزِ گاوسر تشنه‌ی نبرد است."
+      "text": "گُرْزِ گاوْسَر، تِشْنِه‌یِ نَبَرْد اَسْت."
     },
     {
       "id": "hero_move_0",
       "voice": "rostam",
-      "text": "رخش را زین کنید، می‌تازیم!"
+      "text": "رَخْش را زیْن کُنیْد، میْ‌تازیْم!"
     },
     {
       "id": "hero_move_1",
       "voice": "rostam",
-      "text": "رستم به راه می‌افتد."
+      "text": "رُسْتَم، بِه راه میْ‌اُفْتَد."
     },
     {
       "id": "hero_attack_0",
       "voice": "rostam",
-      "text": "[shouting] افراسیاب! از رستم بترس!"
+      "text": "[shouting] اَفْراسِیاب! اَز رُسْتَم بِتَرْس!"
     },
     {
       "id": "hero_attack_1",
       "voice": "rostam",
-      "text": "[shouting] کیست که با رستم پنجه نرم کند؟"
+      "text": "[shouting] کیْسْت، کِه با رُسْتَم پَنْجِه نَرْم کُنَد؟"
     },
     {
       "id": "power_arrows",
       "voice": "herald",
-      "text": "[shouting] کمانداران! آسمان را سیاه کنید!"
+      "text": "[shouting] کَمانْداران! آسِمان را سِیاه کُنیْد!"
     },
     {
       "id": "power_fire",
       "voice": "herald",
-      "text": "[shouting] آتش! بسوزانیدشان!"
+      "text": "[shouting] آتَش! بِسوْزانیْدِشان!"
     },
     {
       "id": "power_lightning",
       "voice": "herald",
-      "text": "[shouting] خشمِ آسمان بر سرِ دشمن!"
+      "text": "[shouting] خَشْمِ آسِمان، بَر سَرِ دُشْمَن!"
     },
     {
       "id": "power_simorgh",
       "voice": "herald",
-      "text": "سیمرغ آمد! زخم‌ها بسته شد."
+      "text": "سیْمُرْغ آمَد! زَخْم‌ها، بَسْتِه شُد."
     },
     {
       "id": "turan_attack_0",
       "voice": "afrasiab",
-      "text": "[shouting] سپاهِ توران! ایران را به خاک بکشید!"
+      "text": "[shouting] سِپاهِ توْران! ایْران را، بِه خاک بِکِشیْد!"
     },
     {
       "id": "turan_attack_1",
       "voice": "afrasiab",
-      "text": "[shouting] امروز دژِ ایرانیان فرو می‌ریزد!"
+      "text": "[shouting] اِمْروْز، دِژِ ایْرانِیان فُروْ میْ‌ریْزَد!"
     },
     {
       "id": "keep_attacked",
       "voice": "herald",
-      "text": "سرور من، دژ زیرِ حمله است!"
+      "text": "سَرْوَرِ مَن، دِژ زیْرِ حَمْلِه اَسْت!"
     },
     {
       "id": "building_lost",
       "voice": "herald",
-      "text": "سرور من، ساختمانی از دست رفت!"
+      "text": "سَرْوَرِ مَن، ساخْتِمانیْ اَز دَسْت رَفْت!"
     },
     {
       "id": "trained_0",
       "voice": "soldier",
-      "text": "سربازِ تازه آماده‌ی خدمت است."
+      "text": "سَرْبازِ تازِه، آمادِه‌یِ خِدْمَت اَسْت."
     },
     {
       "id": "trained_1",
       "voice": "soldier",
-      "text": "برای ایران آمده‌ام."
+      "text": "بَرایِ ایْران آمَدِه‌اَم."
     },
     {
       "id": "upgrade",
       "voice": "herald",
-      "text": "ارتقا انجام شد! قلعه نیرومندتر شد."
+      "text": "اِرْتِقا اَنْجام شُد! قَلْعِه نیْروْمَنْدتَر شُد."
     },
     {
       "id": "village_won",
       "voice": "herald",
-      "text": "روستا از آنِ ما شد!"
+      "text": "روْسْتا، اَز آنِ ما شُد!"
     },
     {
       "id": "village_lost",
       "voice": "herald",
-      "text": "روستا به دستِ تورانیان افتاد!"
+      "text": "روْسْتا، بِه دَسْتِ توْرانِیان اُفْتاد!"
     },
     {
       "id": "no_resources",
       "voice": "herald",
-      "text": "منابع کافی نیست، سرور من."
+      "text": "مَنابِع کافیْ نیْسْت، سَرْوَرِ مَن."
     },
     {
       "id": "victory",
       "voice": "rostam",
-      "text": "[shouting] پیروزی! ایران سربلند ماند!"
+      "text": "[shouting] پیْروْزیْ! ایْران، سَرْبُلَنْد مانْد!"
     },
     {
       "id": "defeat",
       "voice": "afrasiab",
-      "text": "[laughs] دژِ ایران فرو افتاد! توران پیروز است!"
+      "text": "[laughs] دِژِ ایْران فُروْ اُفْتاد! توْران، پیْروْز اَسْت!"
     }
   ]
 }
