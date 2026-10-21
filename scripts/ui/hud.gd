@@ -509,8 +509,11 @@ func _fill_building(b: Building) -> void:
 		"barracks":
 			for t in Defs.TRAIN_MENU:
 				var ud: Dictionary = Defs.UNITS[t]
-				var btn := _button("%s  ·  %s" % [ud.n, Defs.cost_text(ud.cost)], "", world.train.bind(t))
 				var err: String = world.can_train(t, b)
+				# phones show no tooltips, so a locked soldier says on the button what it is waiting for
+				var locked: bool = ud.has("barracks_level") and b.level < ud.barracks_level
+				var info: String = ("نیاز به سربازخانه‌ی سطح %s" % Defs.fa(ud.barracks_level)) if locked else Defs.cost_text(ud.cost)
+				var btn := _button("%s  ·  %s" % [ud.n, info], "", world.train.bind(t))
 				btn.disabled = err != ""
 				btn.tooltip_text = err if err != "" else ud.desc
 				btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT
