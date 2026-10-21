@@ -81,6 +81,8 @@ func _ready() -> void:
 			add_child(load("res://scripts/dev/chaintest.gd").new())
 		if a == "--campcheck":
 			add_child(load("res://scripts/dev/campcheck.gd").new())
+		if a == "--siegetest":
+			add_child(load("res://scripts/dev/siegetest.gd").new())
 		if a == "--pathtest":
 			add_child(load("res://scripts/dev/pathtest.gd").new())
 		if a.begins_with("--shots="):

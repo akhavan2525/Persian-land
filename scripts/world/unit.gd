@@ -30,6 +30,9 @@ var _prog_pos := Vector3.ZERO     # where the unit was at the last progress chec
 var _prog_t := 0.0
 var _stuck_n := 0                 # progress checks in a row with almost no movement
 var _crowd_t := 0.0
+var _goal: Node3D = null          # what this soldier was ordered to attack; side fights return to it
+var _retry := 0                   # times this order got stuck and was tried again
+var _pause_t := 0.0               # stands aside a moment to let a jam clear
 var _retarget_t := 0.0
 
 # battle formations (see World.apply_formation)
@@ -181,7 +184,10 @@ func order_move(p: Vector3, fight := false) -> void:
 	state = State.MOVE
 	attack_move = fight
 	target = null
+	_goal = null
 	dest = p
+	_retry = 0
+	_pause_t = 0.0
 	_reset_progress()
 	_repath(p)
 
@@ -191,7 +197,10 @@ func order_attack(t: Node3D) -> void:
 		return
 	state = State.ATTACK
 	target = t
+	_goal = t
 	repath_t = 0.0
+	_retry = 0
+	_pause_t = 0.0
 	_reset_progress()
 
 
@@ -258,6 +267,12 @@ func tick(dt: float) -> void:
 					order_attack(e)
 					attack_move = true
 					return
+			if _pause_t > 0.0:
+				_pause_t -= dt
+				if _pause_t <= 0.0:
+					_reset_progress()
+					_repath(dest)
+				return
 			if _follow(dt, dest) or _arrived_in_crowd(dt):
 				_arrive()
 		State.ATTACK:
@@ -283,7 +298,15 @@ func _arrive() -> void:
 func _arrived_in_crowd(dt: float) -> bool:
 	var dd := Vector2(dest.x - position.x, dest.z - position.z).length()
 	if dd > 4.0:
-		return _stuck_n >= 6       # hopeless: give up rather than push forever
+		if _stuck_n >= 5:
+			# caught in a jam far from the goal: step aside a moment, then try a fresh way.
+			# Only after many tries (about half a minute) does the soldier give up.
+			_retry += 1
+			if _retry > 6:
+				return true
+			_stuck_n = 0
+			_pause_t = randf_range(0.6, 1.4)
+		return false
 	if _stuck_n >= 2:
 		return true
 	if dd > 2.4:
@@ -314,6 +337,14 @@ func _target_alive() -> bool:
 func _attack_tick(dt: float) -> void:
 	if not _target_alive():
 		target = null
+		# a fight on the way is over: carry on to what we were sent against
+		if _goal != null and is_instance_valid(_goal) and not _goal.dead and type != "div" \
+				and not (_goal is Unit and (_goal as Unit).hidden):
+			target = _goal
+			repath_t = 0.0
+			_reset_progress()
+			return
+		_goal = null
 		if type == "div":
 			state = State.GUARD
 		elif attack_move:
@@ -346,13 +377,17 @@ func _attack_tick(dt: float) -> void:
 				_reset_progress()
 				d = world.distance_to_target(self, target)
 			elif _stuck_n >= 4:
-				# cannot reach this target: look for another, or give up
+				# cannot reach this target: look for another, try a fresh way a few times, or give up
 				var other = world.nearest_enemy(self, maxf(def.range + 3.0, 10.0), attack_move)
 				_reset_progress()
 				if other != null and other != target:
 					target = other
+				elif _retry < 5:
+					_retry += 1
+					repath_t = 0.0
 				else:
 					target = null
+					_goal = null
 					state = State.IDLE if type != "div" else State.GUARD
 					return
 	if d <= def.range:
@@ -409,7 +444,10 @@ func _follow(dt: float, goal: Vector3) -> bool:
 	var nc := Terrain.cell_of(wp)
 	var s = world.structure_at(nc)
 	if s != null and s.side != side and not s.dead and s.blocks(side) and to.length() < 2.6:
+		var keep_goal = _goal if state == State.ATTACK else null
 		order_attack(s)
+		if keep_goal != null:
+			_goal = keep_goal    # break through, then go on to the real target
 		attack_move = attack_move or side != Defs.IRAN
 		return false
 	if to.length() <= step:
