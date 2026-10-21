@@ -488,6 +488,7 @@ func _build_selection_panel() -> void:
 	sel_panel.offset_right = -6
 	sel_panel.offset_top = 60
 	sel_panel.custom_minimum_size.x = 394
+	sel_panel.draw.connect(App.draw_ornate_corners.bind(sel_panel))
 	root.add_child(sel_panel)
 	blockers.append(sel_panel)
 	sel_box = VBoxContainer.new()
@@ -514,6 +515,15 @@ func _on_selection() -> void:
 		sel_panel.visible = false
 		return
 	sel_panel.visible = true
+	# fit the frame to its content every time, so it never stays tall
+	_fit_sel_panel()
+
+
+# fit the frame to its content after the old rows are gone, so it never stays tall
+func _fit_sel_panel() -> void:
+	await get_tree().process_frame
+	sel_panel.offset_bottom = sel_panel.offset_top + sel_panel.get_combined_minimum_size().y
+	sel_panel.queue_redraw()
 
 
 func _fill_units() -> void:

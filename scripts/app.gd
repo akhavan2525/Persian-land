@@ -55,6 +55,10 @@ func _ready() -> void:
 			var ft = load("res://scripts/dev/formtest.gd").new()
 			ft.out = a.substr(11)
 			add_child(ft)
+		if a.begins_with("--panelshot="):
+			var ps = load("res://scripts/dev/panelshot.gd").new()
+			ps.out = a.substr(12)
+			add_child(ps)
 		if a.begins_with("--menushot="):
 			var ms = load("res://scripts/dev/menushot.gd").new()
 			ms.out = a.substr(11)
@@ -135,6 +139,22 @@ static func box(bg: Color, border: Color, radius := 10, bw := 1, pad := 10) -> S
 
 
 ## A 9-slice style from one of the painted UI textures.
+## Gold inner line and the four tile corners of the "Ornate" panel; connect a panel's
+## draw signal to this (bound with the panel) so the corners never stretch.
+static func draw_ornate_corners(c: Control) -> void:
+	var r := Rect2(Vector2.ZERO, c.size)
+	var gold := Color("#dcb65e")
+	c.draw_rect(r.grow(-1.5), gold, false, 2.0)
+	c.draw_rect(r.grow(-9.5), Color(gold, 0.85), false, 2.0)
+	var tex: Texture2D = load("res://assets/ui/panel.png")
+	var k := 52.0
+	var src := Rect2(0, 0, 58, 58)
+	c.draw_texture_rect_region(tex, Rect2(-6, -6, k, k), src)
+	c.draw_texture_rect_region(tex, Rect2(r.size.x + 6 - k, -6, k, k), Rect2(240 - 58, 0, 58, 58))
+	c.draw_texture_rect_region(tex, Rect2(-6, r.size.y + 6 - k, k, k), Rect2(0, 240 - 58, 58, 58))
+	c.draw_texture_rect_region(tex, Rect2(r.size.x + 6 - k, r.size.y + 6 - k, k, k), Rect2(240 - 58, 240 - 58, 58, 58))
+
+
 static func tex_box(path: String, margin: Vector4, content: Vector4, mod := Color.WHITE) -> StyleBoxTexture:
 	var s := StyleBoxTexture.new()
 	s.texture = load(path)
@@ -223,7 +243,14 @@ func _make_theme() -> Theme:
 	# the same frame, a little tighter, for the in-game info panel
 	t.add_type("Ornate")
 	t.set_type_variation("Ornate", "PanelContainer")
-	t.set_stylebox("panel", "Ornate", tex_box("res://assets/ui/panel.png", Vector4(47, 47, 47, 47), Vector4(56, 52, 56, 50)))
+	# The in-game info panel changes height all the time, so its frame is flat
+	# (it never stretches); the four tile corners are drawn on top by draw_ornate_corners.
+	var ornate := box(Color(0.16, 0.09, 0.05, 0.95), LAPIS_3, 14, 7, 38)
+	ornate.content_margin_top = 34
+	ornate.content_margin_bottom = 30
+	ornate.shadow_color = Color(0, 0, 0, 0.35)
+	ornate.shadow_size = 6
+	t.set_stylebox("panel", "Ornate", ornate)
 
 	t.add_type("Title")
 	t.set_type_variation("Title", "Label")
