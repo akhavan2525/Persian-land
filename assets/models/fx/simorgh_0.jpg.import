@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://coh4u6mnsokjj"
+path="res://.godot/imported/simorgh_0.jpg-b91bc158e6f559fea0ecd85cdb37ffca.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "622f5bbe1696ea2e7808050f5e8b10c1"
+}
+
+[deps]
+
+source_file="res://assets/models/fx/simorgh_0.jpg"
+dest_files=["res://.godot/imported/simorgh_0.jpg-b91bc158e6f559fea0ecd85cdb37ffca.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

@@ -7,6 +7,8 @@ var story: Label
 
 
 func _ready() -> void:
+	# the menu is still: half the frames keep the phone cool with no visible change
+	Engine.max_fps = 30
 	theme = App.theme
 	layout_direction = Control.LAYOUT_DIRECTION_RTL
 	var bg := TextureRect.new()

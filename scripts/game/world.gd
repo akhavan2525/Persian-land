@@ -65,6 +65,8 @@ var floats: Array = []          # {pos: Vector3, text, color, t}
 
 
 func _ready() -> void:
+	# 60 frames a second is smooth; 90 and 120 Hz phones would otherwise draw twice as much and heat up
+	Engine.max_fps = 60
 	randomize()
 	stage = App.stage_def()
 	biome = stage.biome

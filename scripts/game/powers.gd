@@ -294,16 +294,99 @@ func _simorgh() -> void:
 	_simorgh_flight()
 
 
-## A great golden bird sweeps across the sky above the camera's view.
+## The Simorgh (a Meshy model) sweeps across the sky above the camera's view, beating its wings.
+## Falls back to a simple glowing bird if the model is missing.
+const SIMORGH_GLB := "res://assets/models/fx/simorgh.glb"
+const SIMORGH_SHADER := preload("res://assets/shaders/simorgh.gdshader")
+
+
 func _simorgh_flight() -> void:
 	var bird := Node3D.new()
+	var flap_mat: ShaderMaterial = null
+	var model := _simorgh_model()
+	var wings := []
+	if model:
+		bird.add_child(model)
+		flap_mat = model.get_meta("flap_mat")
+	else:
+		_simple_simorgh(bird, wings)
+	var trail := CPUParticles3D.new()
+	trail.amount = 40
+	trail.lifetime = 1.6
+	trail.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	trail.emission_box_extents = Vector3(7, 0.2, 1)
+	trail.gravity = Vector3(0, -2.5, 0)
+	trail.mesh = Models.box_mesh(Vector3(0.15, 0.02, 0.4))
+	trail.material_override = _glow_mat(Color("#ffe39a"), 2.5)
+	trail.local_coords = false
+	bird.add_child(trail)
+	world.add_child(bird)
+	# cross the screen from left to right, a little above the battle, so the player sees it
+	var c: Vector3 = world.rig.global_position
+	var right: Vector3 = world.rig.global_transform.basis.x
+	var up_screen: Vector3 = -world.rig.global_transform.basis.z
+	right.y = 0.0
+	up_screen.y = 0.0
+	right = right.normalized()
+	up_screen = up_screen.normalized()
+	var from := c - right * 42.0 - up_screen * 2.0 + Vector3(0, 6, 0)
+	var to := c + right * 42.0 + up_screen * 6.0 + Vector3(0, 8, 0)
+	bird.position = from
+	bird.look_at_from_position(from, to, Vector3.UP)
+	var tw := bird.create_tween()
+	tw.tween_method(func(k: float):
+		bird.position = from.lerp(to, k) + Vector3(0, sin(k * PI) * 3.0, 0)
+		# a slow, mighty beat: quick down stroke, gentle glide between beats
+		var beat := sin(k * 34.0)
+		if flap_mat:
+			flap_mat.set_shader_parameter("flap", beat * 0.55 + 0.1)
+			bird.rotation.z = sin(k * 6.0) * 0.12
+		for w in wings:
+			w[0].rotation.z = beat * 0.45 * w[1], 0.0, 1.0, 6.5)
+	tw.tween_callback(bird.queue_free)
+
+
+func _simorgh_model() -> Node3D:
+	if not ResourceLoader.exists(SIMORGH_GLB):
+		return null
+	var ps: PackedScene = load(SIMORGH_GLB)
+	if ps == null:
+		return null
+	var inst: Node3D = ps.instantiate()
+	var mi: MeshInstance3D = inst if inst is MeshInstance3D else inst.find_children("*", "MeshInstance3D", true, false).front()
+	if mi == null or mi.mesh == null:
+		return null
+	var tex: Texture2D = null
+	var src := mi.get_active_material(0)
+	if src is BaseMaterial3D:
+		tex = (src as BaseMaterial3D).albedo_texture
+	var aabb := mi.mesh.get_aabb()
+	var m := ShaderMaterial.new()
+	m.shader = SIMORGH_SHADER
+	m.set_shader_parameter("tex", tex)
+	m.set_shader_parameter("span", maxf(absf(aabb.position.x), absf(aabb.end.x)))
+	m.set_shader_parameter("shoulder", aabb.size.x * 0.1)
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# the model stands upright facing +Z; lay it down so it flies head first along -Z, belly down
+	var holder := Node3D.new()
+	holder.add_child(inst)
+	inst.rotation = Vector3(deg_to_rad(SIMORGH_PITCH), PI, 0)
+	holder.scale = Vector3.ONE * (16.0 / aabb.size.x)   # about 16 m from wing tip to wing tip
+	holder.set_meta("flap_mat", m)
+	return holder
+
+
+const SIMORGH_PITCH := 70.0
+
+
+func _simple_simorgh(bird: Node3D, wings: Array) -> void:
 	var gold := _glow_mat(Color("#ffcf5a"), 1.6)
 	var body := MeshInstance3D.new()
 	body.mesh = Models.sphere_mesh(0.9, 2.2, 10)
 	body.material_override = gold
 	body.rotation.x = PI / 2
 	bird.add_child(body)
-	var wings := []
 	for s in [-1.0, 1.0]:
 		var w := Node3D.new()
 		var wm := MeshInstance3D.new()
@@ -318,25 +401,3 @@ func _simorgh_flight() -> void:
 	tail.material_override = gold
 	tail.position = Vector3(0, 0, 3.2)
 	bird.add_child(tail)
-	var trail := CPUParticles3D.new()
-	trail.amount = 60
-	trail.lifetime = 1.6
-	trail.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	trail.emission_box_extents = Vector3(7, 0.2, 1)
-	trail.gravity = Vector3(0, -2.5, 0)
-	trail.mesh = Models.box_mesh(Vector3(0.15, 0.02, 0.4))
-	trail.material_override = _glow_mat(Color("#ffe39a"), 2.5)
-	trail.local_coords = false
-	bird.add_child(trail)
-	world.add_child(bird)
-	var c: Vector3 = world.rig.global_position
-	var from := c + Vector3(-60, 16, 25)
-	var to := c + Vector3(60, 18, -25)
-	bird.position = from
-	bird.look_at_from_position(from, to, Vector3.UP)
-	var tw := bird.create_tween()
-	tw.tween_method(func(k: float):
-		bird.position = from.lerp(to, k) + Vector3(0, sin(k * PI) * 4.0, 0)
-		for w in wings:
-			w[0].rotation.z = sin(k * 40.0) * 0.45 * w[1], 0.0, 1.0, 4.0)
-	tw.tween_callback(bird.queue_free)

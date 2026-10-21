@@ -745,12 +745,14 @@ func _build_dialogs() -> void:
 
 func _open_menu() -> void:
 	get_tree().paused = true
+	Engine.max_fps = 30
 	dim.visible = true
 	menu_frame.visible = true
 
 
 func _close_menu() -> void:
 	get_tree().paused = false
+	Engine.max_fps = 60
 	dim.visible = false
 	menu_frame.visible = false
 
@@ -810,7 +812,11 @@ func _process(delta: float) -> void:
 		_refresh_t = 0.25
 		_refresh()
 	overlay.queue_redraw()
-	minimap.queue_redraw()
+	# the little map does not need sixty pictures a second
+	_map_t -= delta
+	if _map_t <= 0.0:
+		_map_t = 0.1
+		minimap.queue_redraw()
 	_refresh_powers()
 
 
@@ -837,6 +843,7 @@ func _refresh() -> void:
 
 
 var _last_sig := ""
+var _map_t := 0.0
 
 
 func _selection_signature() -> String:
