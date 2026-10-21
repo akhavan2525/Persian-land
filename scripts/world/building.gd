@@ -176,6 +176,8 @@ func tick(dt: float) -> void:
 			var u: Unit = world.spawn_unit(t, side, world.free_spot_near(self))
 			if level >= 4:
 				u.make_veteran()
+			if side == Defs.IRAN:
+				Sfx.voice("trained")
 	var arrow = null
 	if type == "tower":
 		arrow = Defs.BUILDINGS.tower
@@ -203,53 +205,12 @@ func _update_fire() -> void:
 		return
 	fire = Node3D.new()
 	add_child(fire)
-	var flames := CPUParticles3D.new()
-	flames.amount = 16
-	flames.lifetime = 0.8
-	flames.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	flames.emission_box_extents = Vector3(half_extent() * 0.6, 0.3, half_extent() * 0.6)
-	flames.position = Vector3(0, 1.5, 0)
-	flames.direction = Vector3.UP
-	flames.spread = 15.0
-	flames.gravity = Vector3(0, 2.5, 0)
-	flames.initial_velocity_min = 0.5
-	flames.initial_velocity_max = 1.5
-	flames.scale_amount_min = 0.6
-	flames.scale_amount_max = 1.3
-	var curve := Curve.new()
-	curve.add_point(Vector2(0, 1))
-	curve.add_point(Vector2(1, 0))
-	flames.scale_amount_curve = curve
-	flames.mesh = Models.box_mesh(Vector3.ONE * 0.45)
-	var fm := StandardMaterial3D.new()
-	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	fm.albedo_color = Color("#ff8a1c")
-	fm.emission_enabled = true
-	fm.emission = Color("#ff6a10")
-	fm.emission_energy_multiplier = 3.0
-	flames.material_override = fm
-	flames.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var e := half_extent() * 0.55
+	var flames := FX.flames(Vector3(e, 0.3, e), 28, 1.3)
+	flames.position = Vector3(0, 1.4, 0)
 	fire.add_child(flames)
-	var smoke := CPUParticles3D.new()
-	smoke.amount = 10
-	smoke.lifetime = 2.6
-	smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	smoke.emission_sphere_radius = half_extent() * 0.4
-	smoke.position = Vector3(0, 2.5, 0)
-	smoke.direction = Vector3.UP
-	smoke.spread = 20.0
-	smoke.gravity = Vector3(0.4, 1.2, 0)
-	smoke.initial_velocity_min = 0.6
-	smoke.initial_velocity_max = 1.2
-	smoke.scale_amount_min = 1.2
-	smoke.scale_amount_max = 2.4
-	smoke.mesh = Models.sphere_mesh(0.5, 1.0, 6)
-	var sm := StandardMaterial3D.new()
-	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	sm.albedo_color = Color(0.18, 0.16, 0.15, 0.45)
-	smoke.material_override = sm
-	smoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var smoke := FX.smoke(Vector3(e * 0.6, 0.3, e * 0.6), 12, 2.6)
+	smoke.position = Vector3(0, 2.6, 0)
 	fire.add_child(smoke)
 
 

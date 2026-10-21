@@ -27,6 +27,8 @@ var end_title: Label
 var end_text: Label
 var _refresh_t := 0.0
 var blockers: Array[Control] = []
+var power_row: HBoxContainer
+var power_btns := {}           # power -> {bar, ring, label}
 
 
 ## True when a screen point is on a panel or button, so the world ignores that touch.
@@ -60,6 +62,7 @@ func _ready() -> void:
 
 	_build_top_bar()
 	_build_bottom_bar()
+	_build_power_row()
 	_build_side_tools()
 	_build_selection_panel()
 	_build_build_panel()
@@ -95,11 +98,31 @@ func _icon(path: String, size := 26) -> TextureRect:
 	return t
 
 
+## Painted face of a unit type; Turan soldiers share one face, the two heroes have their own.
+func _portrait_path(type: String, side: int) -> String:
+	var key := type
+	if side == Defs.TURAN:
+		key = "turan_hero" if type == "hero" else "turan"
+	var path := "res://assets/ui/portraits/%s.png" % key
+	return path if ResourceLoader.exists(path) else ""
+
+
+func _portrait(type: String, side: int, size := 96) -> Control:
+	var path := _portrait_path(type, side)
+	if path == "":
+		return null
+	return _icon(path, size)
+
+
 func _button(text: String, variation := "", cb: Callable = Callable()) -> Button:
 	var b := Button.new()
 	b.text = text
 	if variation != "":
 		b.theme_type_variation = variation
+	if variation == "Primary":
+		# the painted plaque looks right near its own shape, so do not let it stretch wide
+		b.custom_minimum_size = Vector2(250, 84)
+		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	b.focus_mode = Control.FOCUS_NONE
 	if cb.is_valid():
 		b.pressed.connect(cb)
@@ -112,44 +135,88 @@ func _clear(n: Node) -> void:
 
 
 # ---------------- top bar ----------------
+## Where the four number slots sit on the painted top bar, as fractions of its width
+## (printed by tools/ui/make_ui.py).
+const TOP_SLOTS := [[0.0744, 0.2188], [0.2681, 0.4118], [0.5885, 0.7323], [0.7815, 0.9253]]
+const TOP_SLOT_Y := [0.3365, 0.7279]
+const TOP_H := 88.0
+const TOP_W := TOP_H * 1010.0 / 150.0
+
+
 func _build_top_bar() -> void:
 	var bar := PanelContainer.new()
 	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_bottom = 54
-	bar.add_theme_stylebox_override("panel", App.box(Color(App.LAPIS, 0.88), App.GOLD_SOFT, 0, 0, 10))
+	var sb := App.box(Color(App.LAPIS, 0.9), App.GOLD_SOFT, 0, 0, 10)
+	sb.border_width_bottom = 2
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	sb.shadow_size = 8
+	bar.add_theme_stylebox_override("panel", sb)
 	root.add_child(bar)
 	blockers.append(bar)
 	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 14)
+	hb.add_theme_constant_override("separation", 12)
 	bar.add_child(hb)
-	var title := _label("سرزمین پارسیان", 26, App.GOLD, App.font_display)
+	var title := _label("سرزمین پارسیان", 24, App.GOLD, App.font_display)
 	hb.add_child(title)
-	for k in Defs.RES_ORDER:
-		var chip := HBoxContainer.new()
-		chip.add_theme_constant_override("separation", 5)
-		chip.add_child(_icon(ICONS[k]))
-		var l := _label("۰", 20, App.IVORY, App.font_bold)
-		l.custom_minimum_size.x = 44
-		chip.add_child(l)
-		chip.tooltip_text = Defs.RES_NAMES[k]
-		res_labels[k] = l
-		hb.add_child(chip)
-	var pc := HBoxContainer.new()
-	pc.add_child(_icon("res://assets/icons/pop.svg"))
-	pop_label = _label("", 20, App.IVORY, App.font_bold)
-	pc.add_child(pop_label)
-	hb.add_child(pc)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(sp)
 	var wc := HBoxContainer.new()
 	wc.add_child(_icon("res://assets/icons/timer.svg"))
-	wave_label = _label("", 18, Color("#ffb3a8"), App.font_bold)
+	wave_label = _label("", 17, Color("#ffb3a8"), App.font_bold)
 	wc.add_child(wave_label)
 	hb.add_child(wc)
 	speed_btn = _button("سرعت ×۱", "Ghost", _toggle_speed)
 	hb.add_child(speed_btn)
 	hb.add_child(_button("منو", "Ghost", _open_menu))
+
+	# the painted Persian bar in the middle, with the stores in its slots and people in the medallion
+	var art := TextureRect.new()
+	art.texture = load("res://assets/ui/topbar.png")
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_SCALE
+	art.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	art.offset_left = -TOP_W / 2.0
+	art.offset_right = TOP_W / 2.0
+	art.offset_top = -6
+	art.offset_bottom = TOP_H - 6
+	art.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	root.add_child(art)
+	blockers.append(art)
+	# right to left, as Persian reads: wood, stone | people | food, gold
+	var order := ["gold", "food", "stone", "wood"]
+	for i in 4:
+		var k: String = order[i]
+		var x0: float = TOP_SLOTS[i][0] * TOP_W
+		var x1: float = TOP_SLOTS[i][1] * TOP_W
+		var chip := HBoxContainer.new()
+		chip.layout_direction = Control.LAYOUT_DIRECTION_LTR
+		chip.position = Vector2(x0 - 6, TOP_SLOT_Y[0] * TOP_H - 9)
+		chip.size = Vector2(x1 - x0 + 6, (TOP_SLOT_Y[1] - TOP_SLOT_Y[0]) * TOP_H + 18)
+		chip.add_theme_constant_override("separation", 2)
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.tooltip_text = Defs.RES_NAMES[k]
+		chip.add_child(_icon("res://assets/ui/icons/%s.png" % k, 40))
+		var l := _label("۰", 19, App.IVORY, App.font_bold)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.size_flags_vertical = Control.SIZE_FILL
+		chip.add_child(l)
+		res_labels[k] = l
+		art.add_child(chip)
+	pop_label = _label("", 19, Color("#fff4d6"), App.font_black)
+	pop_label.add_theme_color_override("font_outline_color", Color("#0b1a3d"))
+	pop_label.add_theme_constant_override("outline_size", 7)
+	pop_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pop_label.tooltip_text = "جمعیت"
+	var mid := CenterContainer.new()
+	mid.set_anchors_preset(Control.PRESET_FULL_RECT)
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mid.add_child(pop_label)
+	art.add_child(mid)
 
 
 func _toggle_speed() -> void:
@@ -200,6 +267,88 @@ func _build_bottom_bar() -> void:
 		build_buttons[t] = b
 
 
+# ---------------- war powers ----------------
+func _build_power_row() -> void:
+	power_row = HBoxContainer.new()
+	power_row.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	power_row.offset_top = -196
+	power_row.offset_bottom = -104
+	power_row.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	power_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	power_row.add_theme_constant_override("separation", 0)
+	root.add_child(power_row)
+	for k in Defs.POWER_ORDER:
+		# icon button on top, its name in a label below; the VBox keeps them centred together
+		var cell := VBoxContainer.new()
+		cell.add_theme_constant_override("separation", 0)
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(78, 76)
+		cell.add_child(b)
+		b.tooltip_text = Defs.POWERS[k].desc
+		var icon: Texture2D = load("res://assets/ui/icons/power_%s.png" % k)
+		var bar := TextureProgressBar.new()
+		bar.texture_under = icon
+		bar.texture_progress = icon
+		bar.tint_under = Color(0.25, 0.25, 0.3, 0.9)
+		bar.fill_mode = TextureProgressBar.FILL_CLOCKWISE
+		bar.nine_patch_stretch = true
+		bar.max_value = 1.0
+		bar.step = 0.001
+		# anchored to fill the button so right-to-left mirroring cannot push it aside
+		bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bar.offset_left = 3
+		bar.offset_right = -3
+		bar.offset_bottom = -4
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(bar)
+		var ring := Panel.new()
+		var rs := StyleBoxFlat.new()
+		rs.bg_color = Color(0, 0, 0, 0)
+		rs.border_color = App.GOLD
+		rs.set_border_width_all(3)
+		rs.set_corner_radius_all(40)
+		ring.add_theme_stylebox_override("panel", rs)
+		ring.set_anchors_preset(Control.PRESET_FULL_RECT)
+		ring.offset_left = -1
+		ring.offset_right = 1
+		ring.offset_top = -4
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ring.visible = false
+		b.add_child(ring)
+		var l := _label(Defs.POWERS[k].n, 13, App.IVORY, App.font_bold)
+		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		l.add_theme_constant_override("outline_size", 5)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.custom_minimum_size.x = 96
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cell.add_child(l)
+		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		b.pressed.connect(func():
+			Sfx.play("click")
+			world.powers.press(k))
+		power_row.add_child(cell)
+		blockers.append(b)
+		power_btns[k] = {"bar": bar, "ring": ring, "label": l, "btn": b}
+
+
+func _refresh_powers() -> void:
+	power_row.visible = world.mode != "build"
+	var t := Time.get_ticks_msec() / 1000.0
+	for k in power_btns:
+		var pb: Dictionary = power_btns[k]
+		var c: float = world.powers.charge[k]
+		pb.bar.value = c
+		var ready := c >= 1.0
+		pb.ring.visible = ready or world.powers.armed == k
+		if world.powers.armed == k:
+			pb.ring.modulate = Color(1, 1, 1, 0.6 + 0.4 * sin(t * 10.0))
+		elif ready:
+			pb.ring.modulate = Color(1, 1, 1, 0.55 + 0.45 * sin(t * 4.0))
+		pb.bar.modulate = Color(1.15, 1.1, 1.0) if ready else Color(1, 1, 1)
+
+
 # ---------------- left tools ----------------
 func _build_side_tools() -> void:
 	var vb := VBoxContainer.new()
@@ -223,11 +372,12 @@ func _build_side_tools() -> void:
 # ---------------- selection panel ----------------
 func _build_selection_panel() -> void:
 	sel_panel = PanelContainer.new()
+	sel_panel.theme_type_variation = "Ornate"
 	sel_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	sel_panel.offset_left = -330
-	sel_panel.offset_right = -10
-	sel_panel.offset_top = 64
-	sel_panel.custom_minimum_size.x = 320
+	sel_panel.offset_left = -400
+	sel_panel.offset_right = -6
+	sel_panel.offset_top = 60
+	sel_panel.custom_minimum_size.x = 394
 	root.add_child(sel_panel)
 	blockers.append(sel_panel)
 	sel_box = VBoxContainer.new()
@@ -265,15 +415,43 @@ func _fill_units() -> void:
 		max_hp += u.max_hp
 	if world.selected.size() == 1:
 		var u: Unit = world.selected[0]
-		sel_box.add_child(_label(u.display_name(), 24, App.GOLD, App.font_display))
+		var head := HBoxContainer.new()
+		head.add_theme_constant_override("separation", 10)
+		var face := _portrait(u.type, u.side, 104)
+		if face:
+			head.add_child(face)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.alignment = BoxContainer.ALIGNMENT_CENTER
+		head.add_child(col)
+		col.add_child(_label(u.display_name(), 24, App.GOLD, App.font_display))
 		var desc: String = Defs.HEROES[0].desc if u.type == "hero" else Defs.UNITS[u.type].desc
 		var d := _label(desc, 15, App.MUTED)
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sel_box.add_child(d)
+		d.custom_minimum_size.x = 200
+		col.add_child(d)
+		sel_box.add_child(head)
 		var ud: Dictionary = Defs.UNITS[u.type]
 		sel_box.add_child(_label("جان %s از %s · ضربه %s · بُرد %s" % [Defs.fa(int(u.hp)), Defs.fa(int(u.max_hp)), Defs.fa(ud.dmg), Defs.fa(int(ud.range))], 15))
 	else:
 		sel_box.add_child(_label("سپاه برگزیده: %s جنگجو" % Defs.fa(world.selected.size()), 22, App.GOLD, App.font_display))
+		var faces := HBoxContainer.new()
+		faces.add_theme_constant_override("separation", 4)
+		for t in counts:
+			var f := _portrait(t, world.selected[0].side, 62)
+			if f == null:
+				continue
+			var cell := Control.new()
+			cell.custom_minimum_size = Vector2(62, 62)
+			cell.add_child(f)
+			var n := _label(Defs.fa(counts[t]), 16, App.IVORY, App.font_bold)
+			n.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+			n.add_theme_constant_override("outline_size", 6)
+			n.position = Vector2(4, 38)
+			cell.add_child(n)
+			faces.add_child(cell)
+		if faces.get_child_count() > 0:
+			sel_box.add_child(faces)
 		var parts: PackedStringArray = []
 		for t in counts:
 			parts.append("%s %s" % [Defs.fa(counts[t]), Defs.unit_name(t, 0)])
@@ -315,6 +493,12 @@ func _fill_building(b: Building) -> void:
 				btn.disabled = err != ""
 				btn.tooltip_text = err if err != "" else ud.desc
 				btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				var pp := _portrait_path(t, Defs.IRAN)
+				if pp != "":
+					btn.icon = load(pp)
+					btn.expand_icon = true
+					btn.custom_minimum_size.y = 52
+					btn.add_theme_constant_override("icon_max_width", 44)
 				sel_box.add_child(btn)
 			if b.queue.size() > 0:
 				var names: PackedStringArray = []
@@ -340,11 +524,15 @@ func _fill_upgrade(b: Building) -> void:
 		return
 	var cost: Dictionary = world.upgrade_cost(b)
 	var what := "سرزمین، جمعیت و جان بیشتر" if b.type == "keep" else Defs.upgrade_text(b.type, b.level + 1)
-	var up := _button("ارتقا به سطح %s (%s)" % [Defs.fa(b.level + 1), Defs.cost_text(cost)], "Primary", world.upgrade_selected)
+	var up := _button("ارتقا به سطح %s" % Defs.fa(b.level + 1), "Primary", world.upgrade_selected)
 	var err: String = world.can_upgrade(b)
 	up.disabled = err != ""
-	up.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	up.custom_minimum_size = Vector2(250, 84)
+	up.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	sel_box.add_child(up)
+	var cl := _label("هزینه: " + Defs.cost_text(cost), 15, App.GOLD)
+	cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sel_box.add_child(cl)
 	var l := _label(what if err == "" or err == "منابع کافی نیست." else err, 14, App.TURQ if err == "" else App.MUTED)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sel_box.add_child(l)
@@ -569,6 +757,7 @@ func _process(delta: float) -> void:
 		_refresh()
 	overlay.queue_redraw()
 	minimap.queue_redraw()
+	_refresh_powers()
 
 
 func _refresh() -> void:

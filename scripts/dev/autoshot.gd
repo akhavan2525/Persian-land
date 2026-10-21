@@ -64,6 +64,18 @@ func _run() -> void:
 	w.rig.zoom_by(1.0)
 	await _wait(2.0)
 	await _snap("06_built")
+	w.select_hero()
+	await _wait(0.4)
+	await _snap("06b_hero_panel")
+	w.select_all_army()
+	await _wait(0.4)
+	await _snap("06c_army_panel")
+	for b in w.buildings:
+		if b.type == "barracks" and b.side == 0:
+			w.select_building(b)
+	await _wait(0.4)
+	await _snap("06d_barracks_panel")
+	w.clear_selection()
 	w.rig.position = w.keeps[1].position + Vector3(-4, 0, 6)
 	w.rig.dist = 40.0
 	w.rig.zoom_by(1.0)

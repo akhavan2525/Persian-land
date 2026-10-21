@@ -11,6 +11,7 @@ const IRAN := Defs.IRAN
 const TURAN := Defs.TURAN
 const DIVS := Defs.DIVS
 
+var _keep_warned := -100.0    # time of the last spoken warning that the keep is under attack
 var terrain: Terrain
 var rig: CameraRig
 var hud: Node
@@ -37,7 +38,8 @@ var _starving := [false, false]
 # selection & input
 var selected: Array = []
 var selected_building: Building = null
-var mode := "normal"            # normal / build / box
+var mode := "normal"            # normal / build / box / power
+var powers: Powers
 var build_type := ""
 var build_cell := Vector2i(-1, -1)
 var wall_start := Vector2i(-1, -1)
@@ -74,6 +76,11 @@ func _ready() -> void:
 	rig = CameraRig.new()
 	rig.name = "CameraRig"
 	add_child(rig)
+	Sfx.listener = rig
+	powers = Powers.new()
+	powers.name = "Powers"
+	add_child(powers)
+	powers.setup(self)
 	res[IRAN] = Defs.START_RES.duplicate()
 	res[TURAN] = Defs.START_RES.duplicate()
 	_setup_castles()
@@ -441,6 +448,18 @@ func deal_damage(attacker: Node3D, target: Node3D, base: float) -> void:
 	var atype: String = attacker.type if attacker is Unit else "tower"
 	var dmg := base * _damage_mult(atype, target) * randf_range(0.9, 1.1)
 	target.take_damage(dmg, attacker)
+	if target.side == IRAN or attacker.side == IRAN:
+		powers.note_battle()
+	if target is Building and target.type == "keep" and target.side == IRAN and time - _keep_warned > 25.0:
+		_keep_warned = time
+		Sfx.voice("keep_attacked", true)
+		say("دژ زیر حمله است!", TURAN)
+	if atype in ["archer", "tower"]:
+		Sfx.play_at("arrow_hit", target.position, -6.0)
+	elif target is Unit:
+		Sfx.play_at("sword", target.position, -2.0)
+	else:
+		Sfx.play_at("hit", target.position, -3.0)
 	if target is Unit:
 		spawn_burst(target.position + Vector3(0, 1.1, 0), Color("#9c1f17"), 6, 0.1, 2.2, 0.45)
 		if randf() < 0.5:
@@ -455,6 +474,7 @@ func spawn_arrow(src: Node3D, target: Node3D, dmg: float) -> void:
 	var from := src.position + Vector3(0, 1.5, 0)
 	if src is Building:
 		from.y += 5.0 if src.type == "tower" else 7.5
+	Sfx.play_at("bow", from, -8.0)
 	var arrow := MeshInstance3D.new()
 	arrow.mesh = Models.cyl_mesh(0.03, 0.03, 0.9, 4)
 	arrow.material_override = Models.mat(Color("#3b2a1a"))
@@ -485,31 +505,11 @@ func spawn_arrow(src: Node3D, target: Node3D, dmg: float) -> void:
 
 
 func spawn_dust(p: Vector3, scale_m: float) -> void:
-	var ps := CPUParticles3D.new()
-	ps.one_shot = true
-	ps.emitting = true
-	ps.amount = 28
-	ps.lifetime = 1.6
-	ps.explosiveness = 0.85
+	var ps := FX.dust(scale_m, 26)
 	ps.position = p + Vector3(0, 1.0, 0)
-	ps.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	ps.emission_sphere_radius = scale_m
-	ps.direction = Vector3.UP
-	ps.spread = 70.0
-	ps.initial_velocity_min = 1.0
-	ps.initial_velocity_max = 3.5
-	ps.gravity = Vector3(0, -1.0, 0)
-	ps.scale_amount_min = 1.0
-	ps.scale_amount_max = 2.5
-	var m := Models.sphere_mesh(0.5, 1.0, 6)
-	ps.mesh = m
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("#bba98a", 0.6)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	ps.material_override = mat
+	ps.emitting = true
 	add_child(ps)
-	get_tree().create_timer(2.0).timeout.connect(ps.queue_free)
+	get_tree().create_timer(2.2).timeout.connect(ps.queue_free)
 
 
 var _bursts := 0
@@ -534,15 +534,11 @@ func spawn_burst(p: Vector3, col: Color, amount := 8, size := 0.12, speed := 2.5
 	ps.gravity = Vector3(0, -9.0 if not glow else -1.5, 0)
 	ps.scale_amount_min = 0.6
 	ps.scale_amount_max = 1.2
-	ps.mesh = Models.box_mesh(Vector3.ONE * size)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = col
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	if glow:
-		mat.emission_enabled = true
-		mat.emission = col
-		mat.emission_energy_multiplier = 2.0
-	ps.material_override = mat
+		ps.mesh = Models.soft_particle(size * 3.0, col, true, 1.8)
+	else:
+		ps.mesh = Models.box_mesh(Vector3.ONE * size)
+		ps.material_override = Models.mat(col)
 	ps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(ps)
 	get_tree().create_timer(life + 0.3).timeout.connect(func():
@@ -552,6 +548,7 @@ func spawn_burst(p: Vector3, col: Color, amount := 8, size := 0.12, speed := 2.5
 
 # ---------------- deaths ----------------
 func on_unit_killed(u: Unit, killer: Node3D) -> void:
+	Sfx.play_at("death", u.position, -3.0)
 	units.erase(u)
 	selected.erase(u)
 	if u.type == "div":
@@ -568,6 +565,7 @@ func on_unit_killed(u: Unit, killer: Node3D) -> void:
 
 
 func on_building_destroyed(b: Building, _attacker: Node3D) -> void:
+	Sfx.play_at("collapse", b.position)
 	_remove_structure(b)
 	if selected_building == b:
 		selected_building = null
@@ -580,6 +578,7 @@ func on_building_destroyed(b: Building, _attacker: Node3D) -> void:
 	else:
 		if b.side == IRAN:
 			say("%s ویران شد!" % b.display_name(), TURAN)
+			Sfx.voice("building_lost", true)
 	_update_zones()
 
 
@@ -587,6 +586,7 @@ func _finish(win: bool) -> void:
 	if finished:
 		return
 	finished = true
+	Sfx.voice("victory" if win else "defeat", true)
 	game_over.emit(win)
 
 
@@ -703,6 +703,7 @@ func _villages_tick(dt: float) -> void:
 					var prev: int = v.side
 					v.set_side(s)
 					_update_zones()
+					Sfx.voice("village_won" if s == IRAN else "village_lost", true)
 					if s == IRAN:
 						say("روستا به دست ایران افتاد. سرزمین ایران بزرگ‌تر شد!" if prev == -1 else "روستا را از توران پس گرفتیم!", IRAN)
 					else:
@@ -837,6 +838,7 @@ func select_units(list: Array) -> void:
 		if not u.dead and u.side == IRAN:
 			selected.append(u)
 			u.set_selected(true)
+	_chatter("select")
 	selection_changed.emit()
 
 
@@ -879,6 +881,7 @@ func toggle_box_mode() -> void:
 
 
 func start_build(type: String) -> void:
+	powers.cancel()
 	clear_selection()
 	mode = "build"
 	build_type = type
@@ -997,6 +1000,7 @@ func confirm_build() -> void:
 		say(err, TURAN)
 		return
 	pay(IRAN, Defs.BUILDINGS[build_type].cost)
+	Sfx.play("build")
 	var b := _add_building(build_type, IRAN, build_cell, false)
 	spawn_dust(b.position, b.size * 0.8)
 	var t := build_type
@@ -1098,6 +1102,8 @@ func upgrade_building(b: Building) -> void:
 		say(err, TURAN)
 		return
 	pay(IRAN, upgrade_cost(b))
+	Sfx.play("upgrade")
+	Sfx.voice("upgrade")
 	b.upgrade()
 	spawn_dust(b.position, b.size * 1.3)
 	spawn_burst(b.position + Vector3(0, 3.0, 0), Color("#ffd766"), 30, 0.14, 5.0, 1.4, true)
@@ -1233,6 +1239,9 @@ func _pick_building(ground: Vector3) -> Building:
 
 func _tap(screen: Vector2) -> void:
 	var ground := rig.ground_point(screen, terrain)
+	if mode == "power":
+		powers.cast_at(ground)
+		return
 	if mode == "build":
 		_build_tap(ground)
 		return
@@ -1262,6 +1271,7 @@ func _tap(screen: Vector2) -> void:
 		if enemy != null:
 			for s in selected:
 				s.order_attack(enemy)
+			_chatter("attack")
 			_ping(enemy.position, Color("#ff5a4a"))
 			return
 		_move_selected(ground)
@@ -1289,7 +1299,16 @@ func _move_selected(ground: Vector3) -> void:
 		off = off.rotated(Vector3.UP, rig.rotation.y)
 		s.order_move(ground + off)
 		i += 1
+	_chatter("move")
 	_ping(ground, Color("#ffe18a"))
+
+
+## A spoken answer to an order: Rostam answers for himself, otherwise a soldier does.
+func _chatter(kind: String) -> void:
+	if selected.is_empty():
+		return
+	var hero_only: bool = selected.size() == 1 and selected[0].type == "hero"
+	Sfx.voice(("hero_" + kind) if hero_only else kind)
 
 
 func _ping(p: Vector3, col: Color) -> void:

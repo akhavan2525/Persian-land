@@ -134,6 +134,20 @@ const HEROES := [
 ]
 const HERO_RESPAWN := 45.0
 
+# ---------------- war powers ----------------
+## charge: seconds to fill in quiet times; fighting fills them three times faster.
+const POWERS := {
+	"arrows": {"n": "بارش تیر", "charge": 50.0, "radius": 7.0, "target": true,
+		"desc": "آسمان از تیر پر می‌شود. روی زمین بزن تا تیرباران شود."},
+	"fire": {"n": "آتش", "charge": 65.0, "radius": 5.0, "target": true,
+		"desc": "زمین را شعله‌ور می‌کند و ساختمان‌های دشمن را می‌سوزاند."},
+	"lightning": {"n": "رعد و برق", "charge": 80.0, "radius": 5.0, "target": true,
+		"desc": "آذرخش‌های پیاپی بر سر دشمن فرود می‌آید."},
+	"simorgh": {"n": "شفای سیمرغ", "charge": 120.0, "radius": 0.0, "target": false,
+		"desc": "سیمرغ پر می‌گشاید و جان همه‌ی جنگجویان ایران را کامل می‌کند."},
+}
+const POWER_ORDER := ["arrows", "fire", "lightning", "simorgh"]
+
 # ---------------- economy timing ----------------
 const TAX_EVERY := 4.0          # keep gives gold
 const TAX_GOLD := 2

@@ -126,6 +126,8 @@ func _launch_wave() -> void:
 	for u in send:
 		u.order_move(target + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), true)
 	world.say("موج %s: سپاه توران با %s جنگجو به سوی ایران می‌تازد!" % [Defs.fa(wave), Defs.fa(send.size())], Defs.TURAN)
+	Sfx.play("horn")
+	Sfx.voice("turan_attack", true)
 
 
 ## Turan's castle grows with the war: every other wave one building goes up a level.

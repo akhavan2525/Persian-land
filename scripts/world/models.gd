@@ -43,6 +43,38 @@ static func mat(c: Color, rough := 0.85, metal := 0.0) -> StandardMaterial3D:
 	return _mats[key]
 
 
+## Soft round particle: a camera-facing quad with a radial fade. Additive for fire and
+## sparks, normal blending for smoke and dust.
+static func soft_particle(size: float, c: Color, additive := false, energy := 1.0) -> QuadMesh:
+	var key := "soft_%.2f_%s_%s_%.1f" % [size, c.to_html(), additive, energy]
+	return _mesh(key, func():
+		var q := QuadMesh.new()
+		q.size = Vector2(size, size)
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 1))
+		g.set_color(1, Color(1, 1, 1, 0))
+		g.add_point(0.45, Color(1, 1, 1, 0.55))
+		var gt := GradientTexture2D.new()
+		gt.gradient = g
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5)
+		gt.fill_to = Vector2(0.5, 0.0)
+		gt.width = 64
+		gt.height = 64
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if additive else BaseMaterial3D.BLEND_MODE_MIX
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		m.vertex_color_use_as_albedo = true
+		m.albedo_texture = gt
+		m.albedo_color = Color(c.r * energy, c.g * energy, c.b * energy, c.a)
+		m.no_depth_test = false
+		m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+		q.material = m
+		return q)
+
+
 static func _mesh(key: String, maker: Callable) -> Mesh:
 	if not _meshes.has(key):
 		_meshes[key] = maker.call()

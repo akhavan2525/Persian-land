@@ -34,6 +34,10 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "--sim":
 			add_child(load("res://scripts/dev/sim.gd").new())
+		if a.begins_with("--powertest="):
+			var pt = load("res://scripts/dev/powertest.gd").new()
+			pt.out = a.substr(12)
+			add_child(pt)
 		if a == "--wavetest":
 			add_child(load("res://scripts/dev/wavetest.gd").new())
 		if a == "--pathtest":
@@ -68,6 +72,22 @@ static func box(bg: Color, border: Color, radius := 10, bw := 1, pad := 10) -> S
 	return s
 
 
+## A 9-slice style from one of the painted UI textures.
+static func tex_box(path: String, margin: Vector4, content: Vector4, mod := Color.WHITE) -> StyleBoxTexture:
+	var s := StyleBoxTexture.new()
+	s.texture = load(path)
+	s.texture_margin_left = margin.x
+	s.texture_margin_top = margin.y
+	s.texture_margin_right = margin.z
+	s.texture_margin_bottom = margin.w
+	s.content_margin_left = content.x
+	s.content_margin_top = content.y
+	s.content_margin_right = content.z
+	s.content_margin_bottom = content.w
+	s.modulate_color = mod
+	return s
+
+
 func _make_theme() -> Theme:
 	var t := Theme.new()
 	t.default_font = font_regular
@@ -88,25 +108,21 @@ func _make_theme() -> Theme:
 	t.set_color("font_focus_color", "Button", IVORY)
 	t.set_color("font_disabled_color", "Button", Color(IVORY, 0.4))
 
-	# Gold primary button
+	# Primary button: the painted red-and-turquoise plaque
 	t.add_type("Primary")
 	t.set_type_variation("Primary", "Button")
-	var g := box(Color("#c9a34f"), Color("#6e5520"), 11, 0, 14)
-	g.border_width_bottom = 3
-	t.set_stylebox("normal", "Primary", g)
-	var gh := g.duplicate()
-	gh.bg_color = Color("#e0bb62")
-	t.set_stylebox("hover", "Primary", gh)
-	var gp := g.duplicate()
-	gp.bg_color = Color("#b08c3c")
-	gp.border_width_bottom = 1
-	t.set_stylebox("pressed", "Primary", gp)
-	var gd := g.duplicate()
-	gd.bg_color.a = 0.5
-	t.set_stylebox("disabled", "Primary", gd)
+	var bm := Vector4(66, 40, 66, 40)
+	var bc := Vector4(54, 18, 54, 20)
+	t.set_stylebox("normal", "Primary", tex_box("res://assets/ui/button.png", bm, bc))
+	t.set_stylebox("hover", "Primary", tex_box("res://assets/ui/button.png", bm, bc, Color(1.15, 1.1, 1.05)))
+	t.set_stylebox("pressed", "Primary", tex_box("res://assets/ui/button.png", bm, bc, Color(0.82, 0.8, 0.8)))
+	t.set_stylebox("disabled", "Primary", tex_box("res://assets/ui/button.png", bm, bc, Color(0.55, 0.55, 0.6, 0.75)))
+	t.set_stylebox("focus", "Primary", StyleBoxEmpty.new())
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		t.set_color(c, "Primary", Color("#1d1404"))
-	t.set_color("font_disabled_color", "Primary", Color("#1d1404", 0.6))
+		t.set_color(c, "Primary", Color("#fff4d6"))
+	t.set_color("font_disabled_color", "Primary", Color("#fff4d6", 0.55))
+	t.set_color("font_outline_color", "Primary", Color("#3a0a06"))
+	t.set_constant("outline_size", "Primary", 6)
 	t.set_font("font", "Primary", font_black)
 	t.set_font_size("font_size", "Primary", 20)
 
@@ -124,10 +140,11 @@ func _make_theme() -> Theme:
 	t.set_stylebox("panel", "PanelContainer", box(Color(LAPIS_2, 0.94), LINE, 12, 1, 12))
 	t.add_type("Frame")
 	t.set_type_variation("Frame", "PanelContainer")
-	var fr := box(Color(LAPIS, 0.92), GOLD_SOFT, 14, 2, 22)
-	fr.shadow_color = Color(0, 0, 0, 0.45)
-	fr.shadow_size = 18
-	t.set_stylebox("panel", "Frame", fr)
+	t.set_stylebox("panel", "Frame", tex_box("res://assets/ui/panel.png", Vector4(47, 47, 47, 47), Vector4(64, 58, 64, 58)))
+	# the same frame, a little tighter, for the in-game info panel
+	t.add_type("Ornate")
+	t.set_type_variation("Ornate", "PanelContainer")
+	t.set_stylebox("panel", "Ornate", tex_box("res://assets/ui/panel.png", Vector4(47, 47, 47, 47), Vector4(56, 52, 56, 50)))
 
 	t.add_type("Title")
 	t.set_type_variation("Title", "Label")

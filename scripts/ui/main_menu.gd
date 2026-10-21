@@ -15,12 +15,13 @@ func _ready() -> void:
 	add_child(bg)
 	var shade := TextureRect.new()
 	var grad := Gradient.new()
-	grad.set_color(0, Color(0.05, 0.09, 0.2, 0.0))
-	grad.set_color(1, Color(0.05, 0.09, 0.2, 0.85))
+	grad.set_color(0, Color(0.03, 0.02, 0.02, 0.55))
+	grad.set_color(1, Color(0.03, 0.02, 0.02, 0.0))
 	var gt := GradientTexture2D.new()
 	gt.gradient = grad
-	gt.fill_from = Vector2(0.25, 0)
-	gt.fill_to = Vector2(1, 0)
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.62)
+	gt.fill_to = Vector2(0.5, 0.05)
 	shade.texture = gt
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -28,11 +29,14 @@ func _ready() -> void:
 
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Frame"
-	panel.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	panel.offset_right = -40
-	panel.offset_left = -560
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -300
+	panel.offset_right = 300
+	panel.offset_top = 10
+	panel.offset_bottom = 10
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.custom_minimum_size = Vector2(520, 0)
+	panel.custom_minimum_size = Vector2(600, 0)
 	add_child(panel)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 12)
@@ -76,7 +80,8 @@ func _ready() -> void:
 	var start := Button.new()
 	start.text = "آغاز نبرد"
 	start.theme_type_variation = "Primary"
-	start.custom_minimum_size = Vector2(0, 60)
+	start.custom_minimum_size = Vector2(340, 112)
+	start.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	start.add_theme_font_size_override("font_size", 24)
 	start.focus_mode = Control.FOCUS_NONE
 	start.pressed.connect(_start)
