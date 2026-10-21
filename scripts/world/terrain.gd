@@ -34,6 +34,9 @@ var _leaf_mats: Array = []
 var _bare_mats: Array = []      # leaves of the plane trees, which fall in winter
 var _bark_mats: Array = []
 var _grass_mat: StandardMaterial3D
+var _chenar := [[], []]          # plane tree transforms per model, for their winter twins
+var _chenar_mmis: Array = []     # the leafy plane trees
+var _snow_mmis: Array = []       # the same trees bare and snowy (built when the snow comes)
 
 
 ## Builds the land. The first stage keeps its hand-made layout; later stages scatter
@@ -475,7 +478,7 @@ func _nature_mesh(file: String) -> Mesh:
 			m.albedo_texture = tex
 			m.vertex_color_use_as_albedo = true
 			m.roughness = 0.95
-			if file.begins_with("tree"):
+			if file.begins_with("tree") and not file.begins_with("tree_snow"):
 				_bark_mats.append(m)
 			mesh.surface_set_material(i, m)
 	inst.free()
@@ -483,7 +486,8 @@ func _nature_mesh(file: String) -> Mesh:
 
 
 ## Instances grouped in 20 m chunks, so the camera only draws the chunks it can see.
-func _chunked(mesh: Mesh, xforms: Array, colors: Array, shadows := true) -> void:
+func _chunked(mesh: Mesh, xforms: Array, colors: Array, shadows := true) -> Array:
+	var made := []
 	var chunks := {}
 	for i in xforms.size():
 		var o: Vector3 = xforms[i].origin
@@ -506,6 +510,8 @@ func _chunked(mesh: Mesh, xforms: Array, colors: Array, shadows := true) -> void
 		mmi.multimesh = mm
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mmi)
+		made.append(mmi)
+	return made
 
 
 func _near_castle_or_road(p: Vector3) -> bool:
@@ -545,7 +551,37 @@ func _scatter_trees() -> void:
 			cols[k].append(Color(0.9 + hue * 0.25, 0.95 + hue * 0.15, 0.85 + hue * 0.1))
 	for k in 3:
 		if xf[k].size() > 0:
-			_chunked(_nature_mesh(kinds[k]), xf[k], cols[k])
+			var made := _chunked(_nature_mesh(kinds[k]), xf[k], cols[k])
+			if k < 2:
+				_chenar[k] = xf[k]
+				_chenar_mmis += made
+	if biome == "snow":
+		_show_snow_trees(true)
+
+
+## Winter: the plane trees stand bare with snow on their branches (Meshy models,
+## scaled to the height of the leafy tree each one replaces). Cypresses stay green.
+func _show_snow_trees(on: bool) -> void:
+	if on and _snow_mmis.is_empty():
+		var files := ["tree_snow_a", "tree_snow_b"]
+		var height := [7.2, 6.0]
+		for k in 2:
+			if _chenar[k].is_empty():
+				continue
+			var mesh := _nature_mesh(files[k])
+			var box := mesh.get_aabb()
+			var s: float = height[k] / maxf(box.size.y, 0.01)
+			var fit := Transform3D(Basis().scaled(Vector3(s, s, s)), Vector3(0, -box.position.y * s - 0.05, 0))
+			var xs := []
+			var cs := []
+			for x: Transform3D in _chenar[k]:
+				xs.append(x * fit)
+				cs.append(Color(1.2, 1.22, 1.28))
+			_snow_mmis += _chunked(mesh, xs, cs)
+	for m: Node3D in _snow_mmis:
+		m.visible = on
+	for m: Node3D in _chenar_mmis:
+		m.visible = not on
 
 
 func _scatter_rocks() -> void:
@@ -621,7 +657,9 @@ func set_winter(k: float) -> void:
 	for fm: ShaderMaterial in _leaf_mats:
 		fm.set_shader_parameter("leaf_tint", a.leaf.lerp(b.leaf, k))
 		fm.set_shader_parameter("snow_amt", lerpf(a.leaf_snow, b.leaf_snow, k))
-	# the plane trees drop their leaves and stand dry; cypresses stay green under snow
+	# the plane trees drop their leaves and dry up, then stand bare under the snow
+	if k >= 0.55 and _snow_mmis.is_empty():
+		_show_snow_trees(true)
 	for fm: ShaderMaterial in _bare_mats:
 		fm.set_shader_parameter("bare", 0.72 * clampf(k * 1.4, 0.0, 1.0))
 		fm.set_shader_parameter("snow_amt", lerpf(a.leaf_snow, 0.75, k))
