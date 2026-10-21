@@ -12,6 +12,9 @@ var max_hp := 1.0
 var level := 1
 var dead := false
 var model: Node3D
+var fire: Node3D = null
+var _fire_t := 0.0
+var marks: Node3D               # level banners, kept outside the model so its scale does not touch them
 var prod_t := 0.0
 var atk_cd := 0.0
 var queue: Array = []          # unit types waiting to be trained
@@ -30,7 +33,7 @@ func setup(w: Node, t: String, s: int, c: Vector2i, lvl := 1, instant := true) -
 	cell = c
 	level = lvl
 	size = Defs.BUILDINGS[t].size
-	max_hp = Defs.KEEP_LEVELS[level - 1].hp if t == "keep" else float(Defs.BUILDINGS[t].hp)
+	max_hp = _level_hp()
 	hp = max_hp
 	position = center_flat()
 	position.y = _ground_y()
@@ -88,6 +91,11 @@ func _rebuild_model() -> void:
 		model.queue_free()
 	model = Models.make_building(type, side, level)
 	add_child(model)
+	if marks:
+		marks.queue_free()
+	marks = Models.level_marks(type, side, level)
+	marks.position.y = 0.05
+	add_child(marks)
 	if type in ["wall", "gate"]:
 		model.rotation.y = 0.0
 	elif type != "keep":
@@ -100,13 +108,30 @@ func set_side(s: int) -> void:
 	_rebuild_model()
 
 
+func _level_hp() -> float:
+	if type == "keep":
+		return Defs.KEEP_LEVELS[level - 1].hp
+	return float(Defs.BUILDINGS[type].hp) * Defs.LEVEL_HP[clampi(level - 1, 0, Defs.LEVEL_HP.size() - 1)]
+
+
+func max_level() -> int:
+	if type == "keep":
+		return Defs.KEEP_LEVELS.size()
+	return Defs.MAX_LEVEL.get(type, 1)
+
+
 func upgrade() -> void:
 	level += 1
 	var frac := hp / max_hp
-	max_hp = Defs.KEEP_LEVELS[level - 1].hp
+	max_hp = _level_hp()
 	hp = max_hp * maxf(frac, 0.6)
 	_rebuild_model()
 	_rise = 0.3
+
+
+## Seconds to train one unit here.
+func train_time(t: String) -> float:
+	return Defs.UNITS[t].time * Defs.LEVEL_TRAIN[clampi(level - 1, 0, Defs.LEVEL_TRAIN.size() - 1)]
 
 
 func set_selected(v: bool) -> void:
@@ -142,13 +167,15 @@ func tick(dt: float) -> void:
 		prod_t += dt * rate
 		if prod_t >= bd.every:
 			prod_t -= bd.every
-			world.add_resource(side, bd.res, bd.amt, self)
+			world.add_resource(side, bd.res, int(round(bd.amt * Defs.LEVEL_PROD[clampi(level - 1, 0, 2)])), self)
 	if type == "barracks" and queue.size() > 0:
 		train_t += dt
-		if train_t >= Defs.UNITS[queue[0]].time:
+		if train_t >= train_time(queue[0]):
 			var t: String = queue.pop_front()
 			train_t = 0.0
-			world.spawn_unit(t, side, world.free_spot_near(self))
+			var u: Unit = world.spawn_unit(t, side, world.free_spot_near(self))
+			if level >= 4:
+				u.make_veteran()
 	var arrow = null
 	if type == "tower":
 		arrow = Defs.BUILDINGS.tower
@@ -157,7 +184,7 @@ func tick(dt: float) -> void:
 	if arrow != null:
 		atk_cd -= dt
 		if atk_cd <= 0.0:
-			var e = world.nearest_enemy(self, arrow.range, false)
+			var e = world.nearest_enemy(self, arrow.range + (level - 1) * 2.0, false)
 			if e and e is Unit:
 				atk_cd = arrow.cd
 				world.spawn_arrow(self, e, arrow.dmg * (1.0 + (level - 1) * 0.35))
@@ -165,7 +192,72 @@ func tick(dt: float) -> void:
 				atk_cd = 0.4
 
 
+## Fire and smoke on a badly damaged building.
+func _update_fire() -> void:
+	var want := not dead and type != "village" and hp < max_hp * 0.45
+	if want == (fire != null):
+		return
+	if not want:
+		fire.queue_free()
+		fire = null
+		return
+	fire = Node3D.new()
+	add_child(fire)
+	var flames := CPUParticles3D.new()
+	flames.amount = 16
+	flames.lifetime = 0.8
+	flames.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	flames.emission_box_extents = Vector3(half_extent() * 0.6, 0.3, half_extent() * 0.6)
+	flames.position = Vector3(0, 1.5, 0)
+	flames.direction = Vector3.UP
+	flames.spread = 15.0
+	flames.gravity = Vector3(0, 2.5, 0)
+	flames.initial_velocity_min = 0.5
+	flames.initial_velocity_max = 1.5
+	flames.scale_amount_min = 0.6
+	flames.scale_amount_max = 1.3
+	var curve := Curve.new()
+	curve.add_point(Vector2(0, 1))
+	curve.add_point(Vector2(1, 0))
+	flames.scale_amount_curve = curve
+	flames.mesh = Models.box_mesh(Vector3.ONE * 0.45)
+	var fm := StandardMaterial3D.new()
+	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fm.albedo_color = Color("#ff8a1c")
+	fm.emission_enabled = true
+	fm.emission = Color("#ff6a10")
+	fm.emission_energy_multiplier = 3.0
+	flames.material_override = fm
+	flames.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	fire.add_child(flames)
+	var smoke := CPUParticles3D.new()
+	smoke.amount = 10
+	smoke.lifetime = 2.6
+	smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	smoke.emission_sphere_radius = half_extent() * 0.4
+	smoke.position = Vector3(0, 2.5, 0)
+	smoke.direction = Vector3.UP
+	smoke.spread = 20.0
+	smoke.gravity = Vector3(0.4, 1.2, 0)
+	smoke.initial_velocity_min = 0.6
+	smoke.initial_velocity_max = 1.2
+	smoke.scale_amount_min = 1.2
+	smoke.scale_amount_max = 2.4
+	smoke.mesh = Models.sphere_mesh(0.5, 1.0, 6)
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	sm.albedo_color = Color(0.18, 0.16, 0.15, 0.45)
+	smoke.material_override = sm
+	smoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	fire.add_child(smoke)
+
+
 func _process(delta: float) -> void:
+	_fire_t -= delta
+	if _fire_t <= 0.0:
+		_fire_t = 0.5
+		_update_fire()
 	if _rise < 1.0:
 		_rise = minf(1.0, _rise + delta / 1.4)
 		var k := ease(_rise, 0.4)

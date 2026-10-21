@@ -54,6 +54,16 @@ func _ready() -> void:
 				var w: float = Defs.BUILDINGS[t].size * Defs.CELL
 				b.position = Vector3(x + w / 2.0, 0, 0)
 				x += w + 1.5
+	if what == "levels":
+		# every level of the barracks, house, tower and a wall, with their level banners
+		for row in [["barracks", 4], ["house", 3], ["tower", 3], ["wall", 3]]:
+			for lv in range(1, row[1] + 1):
+				var b := Models.make_building(row[0], 0, lv)
+				b.add_child(Models.level_marks(row[0], 0, lv))
+				add_child(b)
+				var w: float = Defs.BUILDINGS[row[0]].size * Defs.CELL
+				b.position = Vector3(x + w / 2.0, 0, 0)
+				x += w + 1.5
 	var ux := 0.0
 	if what in ["all", "units"]:
 		for t in ["spear", "archer", "cav", "immortal", "hero", "div"]:

@@ -107,6 +107,7 @@ func _defend() -> void:
 func _launch_wave() -> void:
 	wave += 1
 	next_wave = world.time + D.every
+	_grow_castle()
 	var size := int(D.base + D.grow * (wave - 1))
 	var k = world.keeps[Defs.TURAN]
 	var pool := _army().filter(func(u): return u.type != "hero" and u.state != Unit.State.ATTACK)
@@ -125,6 +126,23 @@ func _launch_wave() -> void:
 	for u in send:
 		u.order_move(target + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), true)
 	world.say("موج %s: سپاه توران با %s جنگجو به سوی ایران می‌تازد!" % [Defs.fa(wave), Defs.fa(send.size())], Defs.TURAN)
+
+
+## Turan's castle grows with the war: every other wave one building goes up a level.
+func _grow_castle() -> void:
+	if wave < 2 or wave % 2 != 0:
+		return
+	var k = world.keeps[Defs.TURAN]
+	if k == null or k.dead:
+		return
+	var list: Array = world.buildings.filter(func(b): return b.side == Defs.TURAN and not b.dead and b.type in ["barracks", "tower"] and b.level < mini(b.max_level(), k.level))
+	if list.is_empty():
+		if k.level < k.max_level():
+			k.upgrade()
+			world._update_zones()
+		return
+	list.sort_custom(func(a, b): return a.level < b.level)
+	list[0].upgrade()
 
 
 func _raid() -> void:

@@ -302,22 +302,16 @@ func _fill_building(b: Building) -> void:
 		sel_box.add_child(_label("جان %s از %s" % [Defs.fa(int(b.hp)), Defs.fa(int(b.max_hp))], 15))
 	if b.side != Defs.IRAN:
 		return
+	if b.type != "village" and b.max_level() > 1:
+		_fill_upgrade(b)
 	match b.type:
 		"keep":
-			sel_box.add_child(_label("سطح %s · جمعیت %s" % [Defs.fa(b.level), Defs.fa(world.pop_cap(Defs.IRAN))], 16))
-			if b.level < Defs.KEEP_LEVELS.size():
-				var cost: Dictionary = Defs.KEEP_LEVELS[b.level].cost
-				var up := _button("ارتقا به سطح %s (%s)" % [Defs.fa(b.level + 1), Defs.cost_text(cost)], "Primary", world.upgrade_keep)
-				up.disabled = not world.afford(Defs.IRAN, cost)
-				up.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-				sel_box.add_child(up)
-			else:
-				sel_box.add_child(_label("دژ در بالاترین سطح است.", 15, App.TURQ))
+			sel_box.add_child(_label("جمعیت %s" % Defs.fa(world.pop_cap(Defs.IRAN)), 16))
 		"barracks":
 			for t in Defs.TRAIN_MENU:
 				var ud: Dictionary = Defs.UNITS[t]
 				var btn := _button("%s  ·  %s" % [ud.n, Defs.cost_text(ud.cost)], "", world.train.bind(t))
-				var err: String = world.can_train(t)
+				var err: String = world.can_train(t, b)
 				btn.disabled = err != ""
 				btn.tooltip_text = err if err != "" else ud.desc
 				btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -332,9 +326,28 @@ func _fill_building(b: Building) -> void:
 		_:
 			var bd: Dictionary = Defs.BUILDINGS[b.type]
 			if bd.has("res"):
-				sel_box.add_child(_label("هر %s ثانیه %s %s" % [Defs.fa(int(bd.every)), Defs.fa(bd.amt), Defs.RES_NAMES[bd.res]], 15, App.TURQ))
+				var amt := int(round(bd.amt * Defs.LEVEL_PROD[clampi(b.level - 1, 0, 2)]))
+				sel_box.add_child(_label("هر %s ثانیه %s %s" % [Defs.fa(int(bd.every)), Defs.fa(amt), Defs.RES_NAMES[bd.res]], 15, App.TURQ))
 	if b.type not in ["keep", "village"]:
 		sel_box.add_child(_button("تخریب (نیمی از هزینه برمی‌گردد)", "", world.demolish_selected))
+
+
+## Level and the upgrade button, the same for every building.
+func _fill_upgrade(b: Building) -> void:
+	sel_box.add_child(_label("سطح %s از %s" % [Defs.fa(b.level), Defs.fa(b.max_level())], 16, App.GOLD))
+	if b.level >= b.max_level():
+		sel_box.add_child(_label("در بالاترین سطح است.", 15, App.TURQ))
+		return
+	var cost: Dictionary = world.upgrade_cost(b)
+	var what := "سرزمین، جمعیت و جان بیشتر" if b.type == "keep" else Defs.upgrade_text(b.type, b.level + 1)
+	var up := _button("ارتقا به سطح %s (%s)" % [Defs.fa(b.level + 1), Defs.cost_text(cost)], "Primary", world.upgrade_selected)
+	var err: String = world.can_upgrade(b)
+	up.disabled = err != ""
+	up.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sel_box.add_child(up)
+	var l := _label(what if err == "" or err == "منابع کافی نیست." else err, 14, App.TURQ if err == "" else App.MUTED)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sel_box.add_child(l)
 
 
 # ---------------- build mode panel ----------------

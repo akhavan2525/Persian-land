@@ -66,7 +66,10 @@ func _ready() -> void:
 	terrain = Terrain.new()
 	terrain.name = "Terrain"
 	add_child(terrain)
-	terrain.build(randi())
+	var map_seed := randi()
+	if OS.get_cmdline_user_args().has("--pathtest") or OS.get_cmdline_user_args().has("--wavetest"):
+		map_seed = 4242     # same map every test run
+	terrain.build(map_seed)
 	_setup_grids()
 	rig = CameraRig.new()
 	rig.name = "CameraRig"
@@ -173,7 +176,7 @@ func _nearest_open(side: int, c: Vector2i) -> Vector2i:
 	var g: AStarGrid2D = grids[side]
 	if not g.is_point_solid(c):
 		return c
-	for r in range(1, 8):
+	for r in range(1, 20):
 		var best := Vector2i(-1, -1)
 		var bd := INF
 		for j in range(c.y - r, c.y + r + 1):
@@ -195,13 +198,50 @@ func find_path(side: int, from: Vector3, to: Vector3) -> Array:
 	var a := _nearest_open(s, Terrain.cell_of(from))
 	var b := _nearest_open(s, Terrain.cell_of(to))
 	var ids: Array[Vector2i] = grids[s].get_id_path(a, b, true)
-	var out := []
+	var pts := []
 	for k in range(1, ids.size()):
-		var p := Terrain.cell_center_flat(ids[k])
-		out.append(p)
-	if out.size() > 0 and Terrain.cell_of(to) == b:
-		out[out.size() - 1] = Vector3(to.x, 0, to.z)
+		pts.append(Terrain.cell_center_flat(ids[k]))
+	if pts.size() > 0 and Terrain.cell_of(to) == b:
+		pts[pts.size() - 1] = Vector3(to.x, 0, to.z)
+	# string-pulling: skip waypoints that can be reached in a straight, clear line
+	var out := []
+	var cur := Vector3(from.x, 0, from.z)
+	var k := 0
+	while k < pts.size():
+		var far := k
+		var lim := mini(pts.size() - 1, k + 12)
+		for m in range(lim, k, -1):
+			if clear_line(s, cur, pts[m]):
+				far = m
+				break
+		out.append(pts[far])
+		cur = pts[far]
+		k = far + 1
+	if out.is_empty() and Terrain.cell_of(to) == b:
+		out.append(Vector3(to.x, 0, to.z))   # goal is in the same cell
 	return out
+
+
+## True when a unit can walk straight from a to b without touching a blocked cell.
+## Checks a little to each side as well, so units do not clip tree trunks and corners.
+func clear_line(side: int, a: Vector3, b: Vector3) -> bool:
+	var g: AStarGrid2D = grids[clampi(side, 0, 2)]
+	var d := Vector2(b.x - a.x, b.z - a.z)
+	var l := d.length()
+	if l < 0.01:
+		return true
+	var dir := d / l
+	var nrm := Vector2(-dir.y, dir.x) * 0.45
+	var steps := int(ceil(l / 0.5))
+	for i in range(1, steps + 1):
+		var t := minf(float(i) * 0.5, l)
+		var p := Vector2(a.x, a.z) + dir * t
+		for o in [Vector2.ZERO, nrm, -nrm]:
+			var q: Vector2 = p + o
+			var c := Terrain.cell_of(Vector3(q.x, 0, q.y))
+			if g.is_point_solid(c) or g.get_point_weight_scale(c) > 3.0:
+				return false
+	return true
 
 
 func structure_at(c: Vector2i):
@@ -268,7 +308,7 @@ func _footprint_free(c: Vector2i, size: int) -> bool:
 	for j in size:
 		for i in size:
 			var p := c + Vector2i(i, j)
-			if not Terrain.in_grid(p) or terrain.type_at(p) != Terrain.GRASS or structure_at(p) != null:
+			if not Terrain.in_grid(p) or terrain.type_at(p) != Terrain.GRASS or terrain.has_tree(p) or structure_at(p) != null:
 				return false
 	return true
 
@@ -401,6 +441,12 @@ func deal_damage(attacker: Node3D, target: Node3D, base: float) -> void:
 	var atype: String = attacker.type if attacker is Unit else "tower"
 	var dmg := base * _damage_mult(atype, target) * randf_range(0.9, 1.1)
 	target.take_damage(dmg, attacker)
+	if target is Unit:
+		spawn_burst(target.position + Vector3(0, 1.1, 0), Color("#9c1f17"), 6, 0.1, 2.2, 0.45)
+		if randf() < 0.5:
+			spawn_burst(target.position + Vector3(0, 1.3, 0), Color("#ffd27a"), 4, 0.06, 3.5, 0.25, true)
+	elif target is Building:
+		spawn_burst(target.position + Vector3(randf_range(-1, 1), 1.5, randf_range(-1, 1)), Color("#9b9284"), 6, 0.18, 3.0, 0.7)
 	if target is Building and target.side == IRAN and randf() < 0.15:
 		rig.shake(0.3)
 
@@ -466,6 +512,44 @@ func spawn_dust(p: Vector3, scale_m: float) -> void:
 	get_tree().create_timer(2.0).timeout.connect(ps.queue_free)
 
 
+var _bursts := 0
+
+
+## Small one-shot spray of particles: blood and sparks on hits, stone chips, gold on upgrades.
+func spawn_burst(p: Vector3, col: Color, amount := 8, size := 0.12, speed := 2.5, life := 0.5, glow := false) -> void:
+	if _bursts > 40:
+		return     # keep phones smooth in big fights
+	_bursts += 1
+	var ps := CPUParticles3D.new()
+	ps.one_shot = true
+	ps.emitting = true
+	ps.amount = amount
+	ps.lifetime = life
+	ps.explosiveness = 0.95
+	ps.position = p
+	ps.direction = Vector3.UP
+	ps.spread = 80.0
+	ps.initial_velocity_min = speed * 0.5
+	ps.initial_velocity_max = speed
+	ps.gravity = Vector3(0, -9.0 if not glow else -1.5, 0)
+	ps.scale_amount_min = 0.6
+	ps.scale_amount_max = 1.2
+	ps.mesh = Models.box_mesh(Vector3.ONE * size)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = col
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if glow:
+		mat.emission_enabled = true
+		mat.emission = col
+		mat.emission_energy_multiplier = 2.0
+	ps.material_override = mat
+	ps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(ps)
+	get_tree().create_timer(life + 0.3).timeout.connect(func():
+		_bursts -= 1
+		ps.queue_free())
+
+
 # ---------------- deaths ----------------
 func on_unit_killed(u: Unit, killer: Node3D) -> void:
 	units.erase(u)
@@ -512,7 +596,7 @@ func pop_cap(side: int) -> int:
 	var cap: int = Defs.KEEP_LEVELS[k.level - 1].pop_cap if k and is_instance_valid(k) else 0
 	for b: Building in buildings:
 		if b.side == side and b.type == "house":
-			cap += Defs.BUILDINGS.house.pop_cap
+			cap += Defs.LEVEL_HOUSE[clampi(b.level - 1, 0, Defs.LEVEL_HOUSE.size() - 1)]
 	return cap
 
 
@@ -706,9 +790,13 @@ func _separate() -> void:
 						var want: float = (a.radius + b.radius) * 0.85
 						var l := d.length()
 						if l < want and l > 0.0001:
-							var push := d / l * (want - l) * 0.35
-							_nudge(a, -push)
-							_nudge(b, push)
+							# the unit that is standing still makes way for the one on the move
+							var push := d / l * (want - l) * 0.7
+							var wa := 0.5
+							if a.moving != b.moving:
+								wa = 0.2 if a.moving else 0.8
+							_nudge(a, -push * wa)
+							_nudge(b, push * (1.0 - wa))
 						elif l <= 0.0001:
 							_nudge(a, Vector2(randf_range(-0.05, 0.05), randf_range(-0.05, 0.05)))
 
@@ -829,7 +917,7 @@ func placement_error(type: String, c: Vector2i) -> String:
 				return "روی آب نمی‌شود ساخت."
 			if t == Terrain.MOUNTAIN or t == Terrain.ROCK:
 				return "زمین سنگلاخ است."
-			if t == Terrain.FOREST:
+			if t == Terrain.FOREST or terrain.has_tree(p):
 				return "این‌جا جنگل است."
 			for u: Unit in units:
 				if not u.dead and Terrain.cell_of(u.position) == p:
@@ -957,10 +1045,12 @@ func _update_ghost() -> void:
 		ghost_reason = ""
 
 
-func can_train(type: String) -> String:
+func can_train(type: String, b: Building = null) -> String:
 	var ud: Dictionary = Defs.UNITS[type]
-	if ud.has("keep_level") and keeps[IRAN].level < ud.keep_level:
-		return "دژ باید سطح %s باشد." % Defs.fa(ud.keep_level)
+	if b == null:
+		b = selected_building
+	if ud.has("barracks_level") and (b == null or b.level < ud.barracks_level):
+		return "سربازخانه باید سطح %s باشد." % Defs.fa(ud.barracks_level)
 	if not afford(IRAN, ud.cost):
 		return "منابع کافی نیست."
 	if _starving[IRAN]:
@@ -974,7 +1064,7 @@ func train(type: String) -> void:
 	var b := selected_building
 	if b == null or b.type != "barracks" or b.side != IRAN:
 		return
-	var err := can_train(type)
+	var err := can_train(type, b)
 	if err != "":
 		say(err, TURAN)
 		return
@@ -983,20 +1073,48 @@ func train(type: String) -> void:
 	selection_changed.emit()
 
 
-func upgrade_keep() -> void:
-	var k: Building = keeps[IRAN]
-	if k.level >= Defs.KEEP_LEVELS.size():
+func upgrade_cost(b: Building) -> Dictionary:
+	if b.type == "keep":
+		return Defs.KEEP_LEVELS[b.level].cost
+	return Defs.upgrade_cost(b.type, b.level + 1)
+
+
+## Empty string when the building can be raised one level, otherwise the reason it cannot.
+func can_upgrade(b: Building) -> String:
+	if b.level >= b.max_level():
+		return "در بالاترین سطح است."
+	if b.type != "keep" and b.level >= keeps[b.side].level:
+		return "اول دژ را به سطح %s برسان." % Defs.fa(b.level + 1)
+	if not afford(b.side, upgrade_cost(b)):
+		return "منابع کافی نیست."
+	return ""
+
+
+func upgrade_building(b: Building) -> void:
+	if b == null or b.dead or b.side != IRAN:
 		return
-	var cost: Dictionary = Defs.KEEP_LEVELS[k.level].cost
-	if not afford(IRAN, cost):
-		say("برای ارتقای دژ منابع کافی نیست.", TURAN)
+	var err := can_upgrade(b)
+	if err != "":
+		say(err, TURAN)
 		return
-	pay(IRAN, cost)
-	k.upgrade()
-	spawn_dust(k.position, 5.0)
-	_update_zones()
-	say("دژ ایران به سطح %s رسید! سرزمین و جمعیت بیشتر شد." % Defs.fa(k.level), IRAN)
+	pay(IRAN, upgrade_cost(b))
+	b.upgrade()
+	spawn_dust(b.position, b.size * 1.3)
+	spawn_burst(b.position + Vector3(0, 3.0, 0), Color("#ffd766"), 30, 0.14, 5.0, 1.4, true)
+	if b.type == "keep":
+		_update_zones()
+		say("دژ ایران به سطح %s رسید! سرزمین و جمعیت بیشتر شد و ساختمان‌ها می‌توانند بالاتر بروند." % Defs.fa(b.level), IRAN)
+	else:
+		say("%s به سطح %s رسید." % [b.display_name(), Defs.fa(b.level)], IRAN)
 	selection_changed.emit()
+
+
+func upgrade_keep() -> void:
+	upgrade_building(keeps[IRAN])
+
+
+func upgrade_selected() -> void:
+	upgrade_building(selected_building)
 
 
 func demolish_selected() -> void:

@@ -348,6 +348,40 @@ static func make_building(type: String, owner: int, level := 1) -> Node3D:
 	return _templates[key].duplicate()
 
 
+## Banners and gilding that show a building's level from afar: level 2 gets two banners
+## at the front corners, level 3 gold caps and two more at the back, level 4 a gold ring.
+static func level_marks(type: String, owner: int, level: int) -> Node3D:
+	var root := Node3D.new()
+	if level < 2 or type in ["keep", "village"]:
+		return root
+	var fc: Color = Defs.faction_color[clampi(owner, 0, 2)] if owner >= 0 else Color("#9a9488")
+	var gold := Color("#d9a53a")
+	var lapis := Color("#2a4fa8")
+	if type in ["wall", "gate"]:
+		part(root, box_mesh(Vector3(2.12, 0.18, 2.12)), lapis if level == 2 else gold, Vector3(0, 2.25, 0), Vector3.ZERO, Vector3.ONE, 0.5, 0.3 if level > 2 else 0.0)
+		return root
+	var h: float = Defs.BUILDINGS[type].size * Defs.CELL * 0.5 - 0.25
+	var spots := [Vector3(-h, 0, h), Vector3(h, 0, h)]
+	if level >= 3:
+		spots += [Vector3(-h, 0, -h), Vector3(h, 0, -h)]
+	var tall := 4.2 if type != "tower" else 3.0
+	for p in spots:
+		var base: Vector3 = p
+		if type == "tower":
+			base = Vector3(p.x * 0.35, 7.0, p.z * 0.35)
+		part(root, cyl_mesh(0.05, 0.06, tall, 6), Color("#3b2a1c"), base + Vector3(0, tall * 0.5, 0))
+		part(root, box_mesh(Vector3(0.04, 1.1, 0.75)), fc, base + Vector3(0, tall - 0.6, 0.4), Vector3.ZERO, Vector3.ONE, 0.9)
+		part(root, box_mesh(Vector3(0.05, 0.14, 0.77)), gold, base + Vector3(0, tall - 1.12, 0.4), Vector3.ZERO, Vector3.ONE, 0.4, 0.6)
+		if level >= 3:
+			part(root, cyl_mesh(0.0, 0.12, 0.35, 8), gold, base + Vector3(0, tall + 0.15, 0), Vector3.ZERO, Vector3.ONE, 0.35, 0.8)
+	if level >= 4:
+		var r: float = h + 0.2
+		for side in [-1.0, 1.0]:
+			part(root, box_mesh(Vector3(r * 2.0, 0.12, 0.12)), gold, Vector3(0, 0.45, side * r), Vector3.ZERO, Vector3.ONE, 0.35, 0.8)
+			part(root, box_mesh(Vector3(0.12, 0.12, r * 2.0)), gold, Vector3(side * r, 0.45, 0), Vector3.ZERO, Vector3.ONE, 0.35, 0.8)
+	return root
+
+
 static func _build_building(type: String, owner: int, level := 1) -> Node3D:
 	var size: int = Defs.BUILDINGS[type].size
 	var target := {"keep": 9.0 + level * 1.5, "house": 3.5, "farm": 2.5, "woodcutter": 3.2, "quarry": 3.0,

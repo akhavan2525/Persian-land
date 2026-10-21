@@ -25,6 +25,12 @@ var idle_t := 0.0
 var radius := 0.45
 var selected := false
 var last_hit_t := -100.0
+var dmg_mult := 1.0
+var _prog_pos := Vector3.ZERO     # where the unit was at the last progress check
+var _prog_t := 0.0
+var _stuck_n := 0                 # progress checks in a row with almost no movement
+var _crowd_t := 0.0
+var _retarget_t := 0.0
 
 var model: Node3D
 var rig := {}
@@ -88,6 +94,13 @@ func setup(w: Node, t: String, o: int, pos: Vector3) -> void:
 		state = State.GUARD
 
 
+## Troops from a fully upgraded barracks.
+func make_veteran() -> void:
+	max_hp *= 1.0 + Defs.VETERAN_BONUS
+	hp = max_hp
+	dmg_mult = 1.0 + Defs.VETERAN_BONUS
+
+
 func is_military() -> bool:
 	return true
 
@@ -109,6 +122,7 @@ func order_move(p: Vector3, fight := false) -> void:
 	attack_move = fight
 	target = null
 	dest = p
+	_reset_progress()
 	_repath(p)
 
 
@@ -118,6 +132,13 @@ func order_attack(t: Node3D) -> void:
 	state = State.ATTACK
 	target = t
 	repath_t = 0.0
+	_reset_progress()
+
+
+func _reset_progress() -> void:
+	_prog_pos = position
+	_prog_t = 0.0
+	_stuck_n = 0
 
 
 func _repath(p: Vector3) -> void:
@@ -166,10 +187,40 @@ func tick(dt: float) -> void:
 					order_attack(e)
 					attack_move = true
 					return
-			if _follow(dt, dest):
-				state = State.IDLE if type != "div" else State.GUARD
+			if _follow(dt, dest) or _arrived_in_crowd(dt):
+				_arrive()
 		State.ATTACK:
 			_attack_tick(dt)
+
+
+func _arrive() -> void:
+	state = State.IDLE if type != "div" else State.GUARD
+	path = []
+	path_i = 0
+	_stuck_n = 0
+
+
+## A group sent to one spot cannot all stand on it: stop once close and touching
+## a friend who has already arrived, or when pushed around near the goal for a while.
+func _arrived_in_crowd(dt: float) -> bool:
+	var dd := Vector2(dest.x - position.x, dest.z - position.z).length()
+	if dd > 4.0:
+		return _stuck_n >= 6       # hopeless: give up rather than push forever
+	if _stuck_n >= 2:
+		return true
+	if dd > 2.4:
+		return false
+	_crowd_t -= dt
+	if _crowd_t > 0.0:
+		return false
+	_crowd_t = 0.25
+	for u: Unit in world.units:
+		if u == self or u.dead or u.side != side or u.state == State.MOVE:
+			continue
+		var d := Vector2(u.position.x - position.x, u.position.z - position.z).length()
+		if d < radius + u.radius + 0.4 and Vector2(dest.x - u.position.x, dest.z - u.position.z).length() < 3.0:
+			return true
+	return false
 
 
 func _target_alive() -> bool:
@@ -197,6 +248,26 @@ func _attack_tick(dt: float) -> void:
 		state = State.GUARD
 		return
 	var d: float = world.distance_to_target(self, target)
+	if d > def.range:
+		_retarget_t -= dt
+		if _retarget_t <= 0.0:
+			_retarget_t = 0.6
+			# someone else already in reach (or an enemy soldier while we walk to a building)? fight them instead
+			var near = world.nearest_enemy(self, maxf(def.range + 0.6, 6.0 if target is Building else 0.0), false)
+			if near != null and near != target and (target is Building or world.distance_to_target(self, near) <= def.range + 0.3):
+				target = near
+				_reset_progress()
+				d = world.distance_to_target(self, target)
+			elif _stuck_n >= 4:
+				# cannot reach this target: look for another, or give up
+				var other = world.nearest_enemy(self, maxf(def.range + 3.0, 10.0), attack_move)
+				_reset_progress()
+				if other != null and other != target:
+					target = other
+				else:
+					target = null
+					state = State.IDLE if type != "div" else State.GUARD
+					return
 	if d <= def.range:
 		_face(target.global_position)
 		if cd <= 0.0:
@@ -207,14 +278,19 @@ func _attack_tick(dt: float) -> void:
 				anim.play(anim_names["attack"], 0.08)
 				anim.seek(0.0, true)
 			if type == "archer":
-				world.spawn_arrow(self, target, def.dmg)
+				world.spawn_arrow(self, target, def.dmg * dmg_mult)
 			else:
-				world.deal_damage(self, target, def.dmg)
+				world.deal_damage(self, target, def.dmg * dmg_mult)
 		return
-	# chase
-	if repath_t <= 0.0 or path_i >= path.size():
-		_repath(world.approach_point(self, target))
-	_follow(dt, world.approach_point(self, target))
+	# chase: close in directly when the way is clear, otherwise follow a fresh path
+	var goal: Vector3 = world.approach_point(self, target)
+	if target is Unit and position.distance_to(goal) < 9.0 and world.clear_line(side, position, goal):
+		path = [Vector3(goal.x, 0, goal.z)]
+		path_i = 0
+		repath_t = 0.3
+	elif repath_t <= 0.0 or path_i >= path.size():
+		_repath(goal)
+	_follow(dt, goal)
 
 
 ## Walks along the current path. Returns true when the destination is reached.
@@ -222,14 +298,17 @@ func _follow(dt: float, goal: Vector3) -> bool:
 	if path_i >= path.size():
 		if path.is_empty() and repath_t <= 0.0:
 			_repath(goal)
-		var flat := Vector2(goal.x - position.x, goal.z - position.z)
-		if flat.length() < 0.6 or path.is_empty():
-			return true
-		path = [goal]
-		path_i = 0
+		if path_i >= path.size():
+			return true     # at the goal, or as close as the map allows
+	_check_progress(dt, goal)
 	var wp: Vector3 = path[path_i]
 	var to := Vector2(wp.x - position.x, wp.z - position.z)
 	var step: float = def.speed * dt
+	# corners do not need to be hit exactly; this keeps groups flowing through them
+	if path_i < path.size() - 1 and to.length() < 0.6:
+		path_i += 1
+		wp = path[path_i]
+		to = Vector2(wp.x - position.x, wp.z - position.z)
 	# blocked by an enemy structure? knock it down
 	var nc := Terrain.cell_of(wp)
 	var s = world.structure_at(nc)
@@ -249,6 +328,31 @@ func _follow(dt: float, goal: Vector3) -> bool:
 	_face(Vector3(wp.x, position.y, wp.z))
 	moving = true
 	return false
+
+
+## Notices when the unit has barely moved for a while (pushed by friends, wedged on a
+## corner) and finds a new way; the callers decide when to give up.
+func _check_progress(dt: float, goal: Vector3) -> void:
+	_prog_t += dt
+	if _prog_t < 1.2:
+		return
+	var moved := Vector2(position.x - _prog_pos.x, position.z - _prog_pos.z).length()
+	if moved < def.speed * 0.3:
+		_stuck_n += 1
+		var g := goal
+		if _stuck_n >= 2:
+			# step around whatever is in the way
+			var side_dir := Vector3(goal.z - position.z, 0, position.x - goal.x).normalized() * (1.5 if _stuck_n % 2 == 0 else -1.5)
+			g = position + side_dir
+			path = world.find_path(side, position, g) + world.find_path(side, g, goal)
+			path_i = 0
+			repath_t = 1.5
+		else:
+			_repath(g)
+	else:
+		_stuck_n = 0
+	_prog_t = 0.0
+	_prog_pos = position
 
 
 func _face(p: Vector3) -> void:

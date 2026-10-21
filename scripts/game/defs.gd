@@ -58,8 +58,52 @@ const BUILD_MENU := ["house", "farm", "woodcutter", "quarry", "barracks", "tower
 const KEEP_LEVELS := [
 	{"hp": 2400, "pop_cap": 10, "radius": 26.0, "cost": {}},
 	{"hp": 3600, "pop_cap": 16, "radius": 32.0, "cost": {"wood": 80, "stone": 100, "gold": 60}},
-	{"hp": 5000, "pop_cap": 24, "radius": 38.0, "cost": {"stone": 180, "gold": 140}},
+	{"hp": 5000, "pop_cap": 24, "radius": 38.0, "cost": {"wood": 100, "stone": 180, "gold": 140}},
+	{"hp": 6600, "pop_cap": 32, "radius": 43.0, "cost": {"wood": 140, "stone": 260, "gold": 220}},
+	{"hp": 8400, "pop_cap": 42, "radius": 48.0, "cost": {"wood": 180, "stone": 360, "gold": 320}},
 ]
+
+# ---------------- building levels ----------------
+## Like the town hall in a castle game: no building can be raised above the keep's level.
+const MAX_LEVEL := {"house": 3, "farm": 3, "woodcutter": 3, "quarry": 3, "barracks": 4, "tower": 3, "wall": 3, "gate": 3}
+const LEVEL_HP := [1.0, 1.4, 1.9, 2.5, 3.2]
+const LEVEL_PROD := [1.0, 1.6, 2.3]           # resources per delivery
+const LEVEL_HOUSE := [5, 8, 12]               # people per house
+const LEVEL_TRAIN := [1.0, 0.8, 0.65, 0.5]    # barracks training time
+## What each barracks level teaches, shown on the upgrade button.
+const BARRACKS_UNLOCK := {1: ["spear", "archer"], 2: ["cav"], 3: ["immortal"]}
+const VETERAN_BONUS := 0.15                   # barracks level 4: tougher, harder-hitting troops
+
+
+static func upgrade_cost(type: String, next_level: int) -> Dictionary:
+	var base: Dictionary = BUILDINGS[type].cost
+	var out := {}
+	for k in base:
+		out[k] = int(ceil(base[k] * (next_level - 0.5) * 1.5 / 5.0) * 5)
+	if type not in ["wall", "gate"]:
+		out["gold"] = out.get("gold", 0) + 15 * (next_level - 1) * (2 if type == "barracks" else 1)
+	return out
+
+
+## One line on what the next level gives, for the upgrade button.
+static func upgrade_text(type: String, next_level: int) -> String:
+	match type:
+		"house":
+			return "جای %s نفر" % fa(LEVEL_HOUSE[next_level - 1])
+		"farm", "woodcutter", "quarry":
+			return "محصول %s برابر" % fa(snappedf(LEVEL_PROD[next_level - 1], 0.1))
+		"barracks":
+			var parts: PackedStringArray = ["آموزش تندتر"]
+			for t in BARRACKS_UNLOCK.get(next_level, []):
+				parts.append("سرباز تازه: " + UNITS[t].n)
+			if next_level == 4:
+				parts.append("سربازان کهنه‌کار با جان و ضربه‌ی بیشتر")
+			return "، ".join(parts)
+		"tower":
+			return "تیر قوی‌تر و بُرد بیشتر"
+	return "جان بیشتر"
+
+
 const VILLAGE_RADIUS := 18.0
 const KEEP_ARROW := {"range": 20.0, "dmg": 10, "cd": 1.4}
 
@@ -73,11 +117,11 @@ const UNITS := {
 		"cost": {"food": 10, "wood": 20, "gold": 10}, "time": 5.0,
 		"desc": "از دور تیر می‌اندازد. بالای دیوار یا پشت نیزه‌داران نگهش دار."},
 	"cav": {"n": "اسوار", "hp": 110, "dmg": 13, "range": 2.0, "speed": 7.5, "cd": 1.1, "armor": 0.1,
-		"cost": {"food": 20, "gold": 30}, "time": 7.0,
-		"desc": "سواره‌ی تندرو. کمانداران را آسان می‌شکند."},
+		"cost": {"food": 20, "gold": 30}, "time": 7.0, "barracks_level": 2,
+		"desc": "سواره‌ی تندرو. کمانداران را آسان می‌شکند. به سربازخانه‌ی سطح ۲ نیاز دارد."},
 	"immortal": {"n": "جاویدان", "hp": 160, "dmg": 15, "range": 1.9, "speed": 3.8, "cd": 1.1, "armor": 0.35,
-		"cost": {"food": 20, "stone": 10, "gold": 45}, "time": 8.0, "keep_level": 2,
-		"desc": "گارد زره‌پوش شاهنشاهی. به دژ سطح ۲ نیاز دارد."},
+		"cost": {"food": 20, "stone": 10, "gold": 45}, "time": 8.0, "barracks_level": 3,
+		"desc": "گارد زره‌پوش شاهنشاهی. به سربازخانه‌ی سطح ۳ نیاز دارد."},
 	"hero": {"n": "پهلوان", "hp": 520, "dmg": 34, "range": 2.2, "speed": 5.6, "cd": 1.0, "armor": 0.3,
 		"cost": {}, "time": 0.0, "desc": ""},
 	"div": {"n": "دیو", "hp": 300, "dmg": 17, "range": 2.6, "speed": 3.2, "cd": 1.6, "armor": 0.2,

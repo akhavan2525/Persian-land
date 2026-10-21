@@ -13,6 +13,7 @@ const N := int(Defs.GRID * Defs.CELL) + 1  # samples per side
 
 var heights := PackedFloat32Array()
 var cell_type := PackedByteArray()
+var tree_cells := {}               # cell index -> true where a tree trunk stands
 var terrain_material: ShaderMaterial
 var noise := FastNoiseLite.new()
 var detail := FastNoiseLite.new()
@@ -120,7 +121,12 @@ func type_at(c: Vector2i) -> int:
 
 func walkable(c: Vector2i) -> bool:
 	var t := type_at(c)
-	return t == GRASS or t == FOREST
+	return (t == GRASS or t == FOREST) and not has_tree(c)
+
+
+## Cells with a tree trunk block movement; forest clearings stay open.
+func has_tree(c: Vector2i) -> bool:
+	return in_grid(c) and tree_cells.has(c.y * G + c.x)
 
 
 func _in_blob(p: Vector3, list: Array, scale := 1.0) -> float:
@@ -422,6 +428,7 @@ func _scatter_trees() -> void:
 				continue   # small clearings
 			var p := base + Vector3(rng.randf_range(-0.7, 0.7), 0, rng.randf_range(-0.7, 0.7))
 			p.y = height_at(p.x, p.z) - 0.1
+			tree_cells[j * G + i] = true
 			var k := 2 if rng.randf() < (0.45 if lone else 0.28) else rng.randi() % 2
 			var s := rng.randf_range(0.75, 1.15) * (0.85 if k < 2 else 1.0)
 			var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s))

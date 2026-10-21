@@ -34,6 +34,10 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "--sim":
 			add_child(load("res://scripts/dev/sim.gd").new())
+		if a == "--wavetest":
+			add_child(load("res://scripts/dev/wavetest.gd").new())
+		if a == "--pathtest":
+			add_child(load("res://scripts/dev/pathtest.gd").new())
 		if a.begins_with("--shots="):
 			var shot = load("res://scripts/dev/autoshot.gd").new()
 			shot.out = a.substr(8)

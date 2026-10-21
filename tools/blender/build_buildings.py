@@ -458,24 +458,54 @@ def keep(roof_mat, tile_mat, banner, door_y=1):
 
 
 def house():
-    box((3.4, 3.4, 0.6), (0, 0, -0.1), GREYSTONE())
-    box((3.0, 2.8, 2.4), (0, 0, 1.4), MUDBRICK())
-    box((3.2, 3.0, 0.2), (0, 0, 2.7), MUDBRICK())
-    box((3.2, 0.25, 0.35), (0, -1.4, 2.95), MUDBRICK())
-    box((3.2, 0.25, 0.35), (0, 1.4, 2.95), MUDBRICK())
-    box((0.25, 3.0, 0.35), (-1.5, 0, 2.95), MUDBRICK())
-    box((0.25, 3.0, 0.35), (1.5, 0, 2.95), MUDBRICK())
-    arch_door(0.75, 1.5, (-0.6, 1.4, 0.2), 1, DARKWOOD())
-    box((0.5, 0.1, 0.55), (0.75, 1.42, 1.6), DARKWOOD(), bevel=0.0)
-    box((0.62, 0.12, 0.08), (0.75, 1.44, 1.3), WOOD())
-    # badgir (wind-catcher)
-    box((0.85, 0.85, 1.9), (0.8, -0.6, 3.6), MUDBRICK())
-    for dx in (-0.25, 0.0, 0.25):
-        box((0.12, 0.9, 0.7), (0.8 + dx, -0.6, 3.95), DARKWOOD(), bevel=0.0)
-    box((1.0, 1.0, 0.15), (0.8, -0.6, 4.6), MUDBRICK())
-    # pots and a bench
-    cyl(0.22, 0.5, (1.25, 1.75, 0.45), flat("clay", (0.66, 0.36, 0.2)), verts=12, r2=0.15)
-    box((1.0, 0.35, 0.35), (0.3, 1.7, 0.3), WOOD())
+    """Persian mud-brick house: a main block with a wind-catcher, a lower domed room,
+    tiled door frames and lattice windows on every side (houses are placed turned)."""
+    clay = flat("clay", (0.66, 0.36, 0.2))
+    box((3.5, 3.5, 0.45), (0, 0, -0.05), GREYSTONE())
+    # main block
+    box((2.5, 2.3, 2.6), (-0.45, -0.4, 1.45), MUDBRICK())
+    box((2.62, 2.42, 0.14), (-0.45, -0.4, 2.0), TURQ_TILE(), bevel=0.0)
+    box((2.66, 2.46, 0.16), (-0.45, -0.4, 2.8), MUDBRICK())
+    for i in range(6):
+        x = -1.6 + i * 0.46
+        box((0.22, 0.2, 0.28), (x, -1.55, 3.0), MUDBRICK())
+        box((0.22, 0.2, 0.28), (x, 0.75, 3.0), MUDBRICK())
+    for i in range(5):
+        y = -1.45 + i * 0.5
+        box((0.2, 0.22, 0.28), (-1.7, y, 3.0), MUDBRICK())
+        box((0.2, 0.22, 0.28), (0.8, y, 3.0), MUDBRICK())
+    # lower domed room
+    box((1.6, 1.7, 1.7), (1.0, 0.75, 1.0), MUDBRICK())
+    box((1.7, 1.8, 0.12), (1.0, 0.75, 1.9), MUDBRICK())
+    cyl(0.62, 0.3, (1.0, 0.75, 2.05), MUDBRICK(), verts=16)
+    dome(0.62, (1.0, 0.75, 2.2), MUDBRICK(), height=0.95, onion=0.12)
+    # wind-catcher
+    box((0.8, 0.8, 1.6), (-1.1, -1.0, 3.6), MUDBRICK())
+    for dx in (-0.22, 0.0, 0.22):
+        box((0.1, 0.84, 0.7), (-1.1 + dx, -1.0, 3.85), DARKWOOD(), bevel=0.0)
+        box((0.84, 0.1, 0.7), (-1.1, -1.0 + dx, 3.85), DARKWOOD(), bevel=0.0)
+    box((0.95, 0.95, 0.14), (-1.1, -1.0, 4.45), MUDBRICK())
+    # doors with tiled frames on two faces
+    arch_door(0.7, 1.45, (-0.45, 0.75, 0.2), 1, DARKWOOD(), LAPIS_TILE())
+    arch_door(0.7, 1.45, (-0.2, -1.55, 0.2), -1, DARKWOOD(), LAPIS_TILE())
+    # lattice windows on all faces
+    for x in (-1.2, 0.35):
+        for y, fy in ((0.76, 1), (-1.56, -1)):
+            if abs(x - (-0.45 if fy > 0 else -0.2)) < 0.6:
+                continue
+            box((0.5, 0.08, 0.6), (x, y, 1.65), DARKWOOD(), bevel=0.0)
+            box((0.6, 0.1, 0.08), (x, y + 0.02 * fy, 1.32), WOOD(), bevel=0.0)
+    for y in (-1.0, 0.1):
+        box((0.08, 0.5, 0.6), (-1.71, y, 1.65), DARKWOOD(), bevel=0.0)
+    box((0.08, 0.45, 0.5), (1.81, 0.75, 1.0), DARKWOOD(), bevel=0.0)
+    box((0.45, 0.08, 0.5), (1.0, 1.61, 1.0), DARKWOOD(), bevel=0.0)
+    box((0.45, 0.08, 0.5), (1.0, -0.11, 1.0), DARKWOOD(), bevel=0.0)
+    # yard: pots, bench, a stack of firewood
+    for x, y in ((1.5, -1.3), (1.15, -1.45)):
+        cyl(0.2, 0.48, (x, y, 0.42), clay, verts=12, r2=0.13)
+    box((1.0, 0.35, 0.32), (0.85, -0.6, 0.32), WOOD())
+    for i in range(3):
+        cyl(0.09, 0.8, (-1.55 + i * 0.19, 1.45, 0.3), wood("log", (0.45, 0.30, 0.17), (0.62, 0.45, 0.28)), verts=8, rot=(0, math.pi / 2, math.pi / 2))
 
 
 def farm():
@@ -535,28 +565,69 @@ def quarry():
 
 
 def barracks(banner):
-    box((6.0, 4.8, 0.5), (0, 0, 0.0), GREYSTONE())
-    box((5.4, 3.6, 2.9), (0, -0.3, 1.7), SANDSTONE())
-    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=3.6, depth=1.5, location=(0, -0.3, 3.9), rotation=(0, 0, math.pi / 4))
-    o = bpy.context.active_object
-    o.scale = (1.05, 0.72, 1)
-    _finish(o, ROOF_RED(), 0.03)
-    # colonnade (talar)
-    for x in (-2.0, -0.7, 0.7, 2.0):
-        cyl(0.16, 2.7, (x, 1.75, 1.6), SANDSTONE(), verts=12)
-        cyl(0.24, 0.25, (x, 1.75, 3.0), GOLD(), verts=12)
-    box((5.6, 0.9, 0.3), (0, 1.6, 3.2), SANDSTONE())
-    box((5.62, 0.1, 0.3), (0, 2.06, 3.2), LAPIS_TILE(), bevel=0.0)
-    arch_door(1.3, 2.0, (0, 1.5, 0.25), 1, DARKWOOD())
-    flag((-2.7, 2.2, 0.25), banner, "barr", 3.8, 1.1)
-    flag((2.7, 2.2, 0.25), banner, "barr", 3.8, 1.1)
-    for i in range(5):
-        cyl(0.025, 2.0, (-1.4 + i * 0.25, 2.3, 1.2), WOOD(), verts=5, rot=(0.15, 0, 0))
-        cyl(0.0, 0.06, (-1.4 + i * 0.25, 2.45, 2.25), flat("iron", (0.45, 0.46, 0.48), 0.4, 0.8), verts=5, r2=0.0)
-    # training dummy
-    cyl(0.05, 1.5, (1.5, 2.6, 0.95), WOOD(), verts=6)
-    box((0.8, 0.08, 0.08), (1.5, 2.6, 1.35), WOOD(), bevel=0.0)
-    cyl(0.18, 0.6, (1.5, 2.6, 1.3), THATCH(), verts=10)
+    """Walled military compound: drill yard in front, a domed hall with an iwan at the back,
+    corner towers with banners. The front (gate) faces -Y, towards the player's camera."""
+    iron = flat("iron", (0.42, 0.43, 0.46), 0.35, 0.85)
+    sand_floor = flat("yard", (0.74, 0.62, 0.45), 0.95, dirt=0.35)
+    box((6.0, 6.0, 0.35), (0, 0, 0.0), GREYSTONE())
+    box((5.5, 5.5, 0.06), (0, 0, 0.2), sand_floor, bevel=0.0)
+    # main hall at the back
+    box((5.6, 2.4, 3.3), (0, 1.6, 1.85), SANDSTONE())
+    box((5.7, 2.5, 0.22), (0, 1.6, 3.55), GREYSTONE())
+    box((5.72, 2.52, 0.18), (0, 1.6, 2.7), TURQ_TILE(), bevel=0.0)
+    merlons(5.6, 2.4, 3.9, SANDSTONE(), step=0.7, mw=0.36, mh=0.45, thick=0.3)
+    # iwan: tall tiled portal with a pointed arch, facing the yard
+    box((2.4, 0.5, 4.3), (0, 0.25, 2.35), SANDSTONE())
+    box((2.0, 0.08, 3.7), (0, -0.02, 2.25), LAPIS_TILE(), bevel=0.0)
+    arch_door(1.15, 2.2, (0, -0.06, 0.2), -1, DARKWOOD(), GOLD())
+    merlons(2.4, 0.5, 4.7, SANDSTONE(), step=0.6, mw=0.3, mh=0.4, thick=0.22)
+    # dome on a drum behind the portal
+    cyl(0.95, 0.7, (0, 1.6, 4.0), SANDSTONE(), verts=24)
+    cyl(1.0, 0.12, (0, 1.6, 4.36), GOLD(), verts=24)
+    dome(0.95, (0, 1.6, 4.4), TURQ_TILE(), height=1.15, onion=0.35)
+    cyl(0.05, 0.6, (0, 1.6, 5.85), GOLD(), verts=6)
+    # corner towers at the back
+    for x in (-2.55, 2.55):
+        cyl(0.62, 4.9, (x, 2.5, 2.45), SANDSTONE(), verts=16, r2=0.55)
+        cyl(0.66, 0.2, (x, 2.5, 3.5), LAPIS_TILE(), verts=16)
+        cyl(0.72, 0.3, (x, 2.5, 4.95), GREYSTONE(), verts=16)
+        ring_merlons(0.64, 5.3, SANDSTONE(), n=7, mw=0.3, mh=0.4)
+        flag((x, 2.5, 5.1), banner, "barr", 2.2, 1.0)
+    # low yard walls with a gate in front
+    for x in (-2.8, 2.8):
+        box((0.35, 3.6, 1.3), (x, -1.0, 0.8), SANDSTONE())
+        for i in range(5):
+            box((0.36, 0.34, 0.35), (x, -2.6 + i * 0.75, 1.62), SANDSTONE())
+    for x in (-1.9, 1.9):
+        box((1.5, 0.35, 1.3), (x, -2.8, 0.8), SANDSTONE())
+        for i in range(2):
+            box((0.34, 0.36, 0.35), (x - 0.4 + i * 0.8, -2.8, 1.62), SANDSTONE())
+    for x in (-1.0, 1.0):
+        box((0.6, 0.6, 2.4), (x, -2.8, 1.35), SANDSTONE())
+        box((0.66, 0.66, 0.16), (x, -2.8, 2.6), LAPIS_TILE())
+        dome(0.3, (x, -2.8, 2.68), GOLD(), height=1.2, onion=0.4)
+    box((1.4, 0.22, 0.3), (0, -2.8, 2.35), SANDSTONE())
+    box((1.42, 0.24, 0.1), (0, -2.8, 2.1), TURQ_TILE(), bevel=0.0)
+    # drill yard: weapon racks, dummies, an archery butt, shields on the wall
+    for k, x in enumerate((-2.1, 2.1)):
+        box((1.2, 0.12, 0.1), (x, 0.0, 1.5), WOOD(), bevel=0.0)
+        box((1.2, 0.12, 0.1), (x, 0.0, 0.6), WOOD(), bevel=0.0)
+        for i in range(5):
+            cyl(0.025, 2.1, (x - 0.5 + i * 0.25, -0.05, 1.25), WOOD(), verts=5, rot=(0.12, 0, 0))
+            cyl(0.06, 0.2, (x - 0.5 + i * 0.25, -0.18, 2.35), iron, verts=5, r2=0.0, rot=(0.12, 0, 0))
+    for x, y in ((-1.3, -1.2), (1.4, -0.9)):
+        cyl(0.05, 1.6, (x, y, 1.0), WOOD(), verts=6)
+        box((0.9, 0.08, 0.08), (x, y, 1.45), WOOD(), bevel=0.0)
+        cyl(0.2, 0.65, (x, y, 1.35), THATCH(), verts=10)
+        cyl(0.13, 0.25, (x, y, 1.82), THATCH(), verts=10)
+    cyl(0.5, 0.18, (-0.2, -0.3, 1.0), THATCH(), verts=20, rot=(math.pi / 2 - 0.25, 0, 0))
+    cyl(0.33, 0.2, (-0.2, -0.33, 1.0), RED_TILE(), verts=20, rot=(math.pi / 2 - 0.25, 0, 0), bevel=0.0)
+    cyl(0.14, 0.22, (-0.2, -0.35, 1.0), GOLD(), verts=16, rot=(math.pi / 2 - 0.25, 0, 0), bevel=0.0)
+    for x in (-1.8, -0.6, 0.6, 1.8):
+        cyl(0.3, 0.06, (x, 0.32, 2.15), CLOTH(banner, "shield"), verts=16, rot=(math.pi / 2, 0, 0))
+        cyl(0.08, 0.08, (x, 0.29, 2.15), GOLD(), verts=10, rot=(math.pi / 2, 0, 0))
+    for x, y in ((2.2, -2.1), (1.85, -2.2), (-2.25, -2.0)):
+        box((0.4, 0.4, 0.4), (x, y, 0.42), WOOD())
 
 
 def tower(banner):
