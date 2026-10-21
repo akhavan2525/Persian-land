@@ -68,8 +68,9 @@ var floats: Array = []          # {pos: Vector3, text, color, t}
 
 func _ready() -> void:
 	war_started.connect(_on_war_started)
-	# 60 frames a second is smooth; 90 and 120 Hz phones would otherwise draw twice as much and heat up
-	Engine.max_fps = 60
+	# 30 frames a second in cool mode (the default), 60 in smooth mode; never 90 or 120
+	App.apply_game_rate()
+	App.apply_render_scale(get_viewport())
 	randomize()
 	stage = App.stage_def()
 	biome = stage.biome
@@ -169,32 +170,34 @@ func _setup_environment() -> void:
 	sun.shadow_bias = 0.04
 	sun.shadow_normal_bias = 1.2
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_max_distance = 110.0
+	sun.directional_shadow_max_distance = 80.0
 	sun.shadow_blur = 1.2
 	add_child(sun)
 
 
 ## Falling snow that follows the camera.
 func _add_snowfall() -> void:
-	var p := CPUParticles3D.new()
+	var p := GPUParticles3D.new()
 	p.name = "Snowfall"
-	p.amount = 700
+	p.amount = 600
 	p.lifetime = 7.0
 	p.preprocess = 7.0
-	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	p.emission_box_extents = Vector3(45, 1, 35)
-	p.direction = Vector3(0.25, -1, 0.1)
-	p.spread = 12.0
-	p.gravity = Vector3(0.3, -0.6, 0.1)
-	p.initial_velocity_min = 2.0
-	p.initial_velocity_max = 3.2
-	p.scale_amount_min = 0.5
-	p.scale_amount_max = 1.2
-	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	p.mesh = Models.soft_particle(0.22, Color(1, 1, 1, 0.9), false)
-	p.color = Color(1, 1, 1, 0.9)
-	p.position = Vector3(0, 22, 0)
 	p.local_coords = false
+	p.visibility_aabb = AABB(Vector3(-50, -30, -40), Vector3(100, 34, 80))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(45, 1, 35)
+	pm.direction = Vector3(0.25, -1, 0.1)
+	pm.spread = 12.0
+	pm.gravity = Vector3(0.3, -0.6, 0.1)
+	pm.initial_velocity_min = 2.0
+	pm.initial_velocity_max = 3.2
+	pm.scale_min = 0.5
+	pm.scale_max = 1.2
+	p.process_material = pm
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.draw_pass_1 = Models.soft_particle(0.22, Color(1, 1, 1, 0.9), false)
+	p.position = Vector3(0, 22, 0)
 	rig.add_child(p)
 
 
@@ -883,39 +886,58 @@ func _physics_process(dt: float) -> void:
 						add_float(h.position + Vector3(0, 3, 0), "سیمرغ!", Color("#ffd766"))
 
 
+## Neighbour cells checked for each cell: itself and the four "forward" ones, so every pair is seen once.
+const _SEP_NB: Array[int] = [0, 1, 4095, 4096, 4097]
+
+
 func _separate() -> void:
+	var alive: Array[Unit] = []
 	var buckets := {}
 	for u: Unit in units:
 		if u.dead:
 			continue
-		var key := Vector2i(int(floor(u.position.x / 2.0)), int(floor(u.position.z / 2.0)))
-		if not buckets.has(key):
-			buckets[key] = []
-		buckets[key].append(u)
-	for key in buckets:
+		var key := int(floor(u.position.x * 0.5)) * 4096 + int(floor(u.position.z * 0.5))
+		var l = buckets.get(key)
+		if l == null:
+			buckets[key] = [alive.size()]
+		else:
+			l.append(alive.size())
+		alive.append(u)
+	var pushes := PackedVector2Array()
+	pushes.resize(alive.size())
+	for key: int in buckets:
 		var list: Array = buckets[key]
-		for dx in [-1, 0, 1]:
-			for dz in [-1, 0, 1]:
-				var other = buckets.get(key + Vector2i(dx, dz))
-				if other == null:
-					continue
-				for a in list:
-					for b in other:
-						if a == b or a.get_instance_id() > b.get_instance_id():
-							continue
-						var d := Vector2(b.position.x - a.position.x, b.position.z - a.position.z)
-						var want: float = (a.radius + b.radius) * 0.85
-						var l := d.length()
-						if l < want and l > 0.0001:
-							# the unit that is standing still makes way for the one on the move
-							var push := d / l * (want - l) * 0.7
-							var wa := 0.5
-							if a.moving != b.moving:
-								wa = 0.2 if a.moving else 0.8
-							_nudge(a, -push * wa)
-							_nudge(b, push * (1.0 - wa))
-						elif l <= 0.0001:
-							_nudge(a, Vector2(randf_range(-0.05, 0.05), randf_range(-0.05, 0.05)))
+		for off: int in _SEP_NB:
+			var other = list if off == 0 else buckets.get(key + off)
+			if other == null:
+				continue
+			for ia: int in list:
+				var a := alive[ia]
+				for ib: int in other:
+					if off == 0 and ib <= ia:
+						continue
+					var b := alive[ib]
+					var dx := b.position.x - a.position.x
+					var dz := b.position.z - a.position.z
+					var want: float = (a.radius + b.radius) * 0.85
+					var l2 := dx * dx + dz * dz
+					if l2 >= want * want:
+						continue
+					if l2 > 0.00000001:
+						# the unit that is standing still makes way for the one on the move
+						var l := sqrt(l2)
+						var push := Vector2(dx, dz) / l * (want - l) * 0.7
+						var wa := 0.5
+						if a.moving != b.moving:
+							wa = 0.2 if a.moving else 0.8
+						pushes[ia] -= push * wa
+						pushes[ib] += push * (1.0 - wa)
+					else:
+						pushes[ia] += Vector2(randf_range(-0.05, 0.05), randf_range(-0.05, 0.05))
+	# move each unit once with the sum of its pushes
+	for i in alive.size():
+		if pushes[i] != Vector2.ZERO:
+			_nudge(alive[i], pushes[i].limit_length(0.35))
 
 
 func _nudge(u: Unit, v: Vector2) -> void:
@@ -2004,30 +2026,34 @@ var _storm_t := 6.0
 
 func _start_storm() -> void:
 	_storm = true
-	var p := CPUParticles3D.new()
+	# drawn and moved on the graphics chip, not the processor
+	var p := GPUParticles3D.new()
 	p.name = "Rain"
-	p.amount = 1200
+	p.amount = 700
 	p.lifetime = 1.1
 	p.preprocess = 1.1
-	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	p.emission_box_extents = Vector3(42, 1, 34)
-	p.direction = Vector3(0.12, -1, 0.05)
-	p.spread = 3.0
-	p.gravity = Vector3(0, -9.0, 0)
-	p.initial_velocity_min = 22.0
-	p.initial_velocity_max = 27.0
-	p.particle_flag_align_y = true
+	p.local_coords = false
+	p.visibility_aabb = AABB(Vector3(-45, -30, -36), Vector3(90, 34, 72))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(40, 1, 32)
+	pm.direction = Vector3(0.12, -1, 0.05)
+	pm.spread = 3.0
+	pm.gravity = Vector3(0, -9.0, 0)
+	pm.initial_velocity_min = 22.0
+	pm.initial_velocity_max = 27.0
+	pm.particle_flag_align_y = true
+	p.process_material = pm
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var drop := BoxMesh.new()
-	drop.size = Vector3(0.04, 1.3, 0.04)
+	drop.size = Vector3(0.045, 1.4, 0.045)
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.albedo_color = Color(0.82, 0.87, 0.97, 0.55)
 	drop.material = m
-	p.mesh = drop
+	p.draw_pass_1 = drop
 	p.position = Vector3(0, 20, 0)
-	p.local_coords = false
 	rig.add_child(p)
 	var amb := AudioStreamPlayer.new()
 	amb.name = "RainSound"

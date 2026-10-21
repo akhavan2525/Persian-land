@@ -14,6 +14,7 @@ const CRIMSON := Color("#d0574b")
 
 var difficulty := "normal"
 var music_on := true
+var smooth := false              # false = cool mode: 30 frames a second, kinder to the battery
 var stage := 0                 # campaign stage being played (index into Defs.STAGES)
 var unlocked := 1              # how many stages the player may choose
 var best := {}                 # "stage:difficulty" -> best time in seconds
@@ -91,6 +92,8 @@ func _ready() -> void:
 			add_child(ss)
 		if a == "--chaintest":
 			add_child(load("res://scripts/dev/chaintest.gd").new())
+		if a == "--perftest":
+			add_child(load("res://scripts/dev/perftest.gd").new())
 		if a == "--homecheck":
 			add_child(load("res://scripts/dev/homecheck.gd").new())
 		if a == "--campcheck":
@@ -125,6 +128,7 @@ func load_progress() -> void:
 	if not Defs.DIFFICULTY.has(difficulty):
 		difficulty = "normal"
 	best = cf.get_value("campaign", "best", {})
+	smooth = bool(cf.get_value("settings", "smooth", false))
 
 
 func save_progress() -> void:
@@ -133,10 +137,31 @@ func save_progress() -> void:
 	cf.set_value("campaign", "stage", stage)
 	cf.set_value("campaign", "difficulty", difficulty)
 	cf.set_value("campaign", "best", best)
+	cf.set_value("settings", "smooth", smooth)
 	cf.save(SAVE_PATH)
 
 
 ## Called when Afrasiab's keep falls: opens the next stage.
+## Frame rate and game-logic rate for a battle. Cool mode draws and thinks 30 times a
+## second, which halves the work (and the heat); smooth mode does both 60 times.
+func apply_game_rate() -> void:
+	Engine.max_fps = 60 if smooth else 30
+	Engine.physics_ticks_per_second = 60 if smooth else 30
+	Engine.max_physics_steps_per_frame = 4
+
+
+## The 3D world is drawn a little smaller and sharpened back up (FSR); menus and text stay
+## at full resolution. Phone screens are so dense that the difference is hard to see.
+func apply_render_scale(vp: Viewport) -> void:
+	var px := DisplayServer.screen_get_size().x
+	var scale := 1.0
+	if OS.has_feature("mobile") and px > 1600:
+		scale = clampf(1600.0 / px, 0.6, 1.0)
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if scale < 1.0 else Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = scale
+	vp.fsr_sharpness = 0.25
+
+
 func stage_won(seconds: float) -> void:
 	var key := "%d:%s" % [stage, difficulty]
 	if not best.has(key) or seconds < float(best[key]):

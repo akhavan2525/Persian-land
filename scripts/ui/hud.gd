@@ -857,6 +857,8 @@ func _build_dialogs() -> void:
 	mt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mv.add_child(mt)
 	mv.add_child(_button("ادامه‌ی نبرد", "Primary", _close_menu))
+	smooth_btn = _button(_smooth_text(), "", _toggle_smooth)
+	mv.add_child(smooth_btn)
 	mv.add_child(_button("راهنمای بازی", "", _open_help))
 	mv.add_child(_button("نبرد تازه", "", _restart))
 	mv.add_child(_button("منوی اصلی", "", _to_menu))
@@ -907,6 +909,19 @@ func _build_dialogs() -> void:
 	ev.add_child(_button("منوی اصلی", "", _to_menu))
 
 
+var smooth_btn: Button
+
+
+func _smooth_text() -> String:
+	return "حرکت: روان (۶۰ فریم)" if App.smooth else "حرکت: خنک و کم‌مصرف (۳۰ فریم)"
+
+
+func _toggle_smooth() -> void:
+	App.smooth = not App.smooth
+	App.save_progress()
+	smooth_btn.text = _smooth_text()
+
+
 func _open_menu() -> void:
 	get_tree().paused = true
 	Engine.max_fps = 30
@@ -916,7 +931,7 @@ func _open_menu() -> void:
 
 func _close_menu() -> void:
 	get_tree().paused = false
-	Engine.max_fps = 60
+	App.apply_game_rate()
 	dim.visible = false
 	menu_frame.visible = false
 
